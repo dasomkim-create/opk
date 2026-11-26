@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:init": "wrangler d1 execute opk-tools --remote --file=schema.sql",
-    "db:init:local": "wrangler d1 execute opk-tools --local --file=schema.sql"
+    "db:init": "wrangler d1 execute opk-tools --remote --file=db/schema.sql",
+    "db:init:local": "wrangler d1 execute opk-tools --local --file=db/schema.sql",
+    "db:example": "wrangler d1 execute opk-tools --remote --file=db/seed.example.sql",
+    "db:example:local": "wrangler d1 execute opk-tools --local --file=db/seed.example.sql"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

@@ -3,7 +3,7 @@
 계약서 편집기와 메일 서명 편집기를 왼쪽 메뉴로 오가는 사내 도구입니다.
 Cloudflare Workers + D1 로 돌아가며, **홈페이지(opk-korea-main)와 완전히 분리된 별도 Worker·DB** 입니다.
 
-- **계약서** — A4 계약서 편집, 한국어/English/中文 버전, PDF·PNG·JPG·DOCX 개별 다운로드, 전체 다운로드(ZIP), AI 번역. 관리자만 보고 고칠 수 있어요.
+- **계약서** — A4 계약서 편집, 사진으로 새 계약서 만들기(AI가 읽어 OPK 양식으로), 한국어/English/中文 버전, PDF·PNG·JPG·DOCX 개별 다운로드, 전체 다운로드(ZIP), AI 번역. 관리자만 보고 고칠 수 있어요.
 - **메일 서명** — 사람별 서명, 양식 5종, 로고 7종, 서식 복사·HTML 복사. 직원 누구나 검색·복사, 수정은 관리자만.
 - 라이트/다크 모드, 메뉴 접기(Ctrl+\\).
 
@@ -15,7 +15,8 @@ public/            화면 (정적 파일)
   cf-shim.js       화면 ↔ /api 연결부
   fonts/ logos/
 src/worker.js      /api (로그인 확인, 권한, D1 저장, AI 번역)
-schema.sql         D1 테이블
+db/schema.sql      D1 테이블
+db/seed.example.sql 예시 데이터 (계약서 양식 2개, 서명 1개)
 wrangler.toml      Worker 설정
 ```
 
@@ -40,10 +41,12 @@ npx wrangler login
 npx wrangler d1 create opk-tools
 npm run db:init
 
-# 2) (선택) 기존 데이터 옮기기 — seed.sql 은 git 에 올리지 않습니다
-npx wrangler d1 execute opk-tools --remote --file=seed.sql
+# 2) 예시 데이터 넣기 (계약서 양식 2개 + 서명 1개, 업체·계좌는 ○○ 예시)
+npx wrangler d1 execute opk-tools --remote --file=db/seed.example.sql
+#    실제 데이터는 따로 받은 seed.sql 로 (git 에 올리지 않기)
+# npx wrangler d1 execute opk-tools --remote --file=seed.sql
 
-# 3) AI 번역을 쓸 때만
+# 3) AI 번역·사진으로 만들기를 쓸 때만
 npx wrangler secret put ANTHROPIC_API_KEY
 
 # 4) wrangler.toml 의 ADMIN_EMAILS 채우고 배포
