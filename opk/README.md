@@ -31,7 +31,7 @@ wrangler.toml      Worker 설정
 
 로그인은 **아이디·비밀번호 하나**로 합니다.
 
-- 아이디: `wrangler.toml` 의 `LOGIN_ID` (지금 `opkvitooladmin`)
+- 아이디: `wrangler.toml` 의 `LOGIN_ID` (지금 `admin`)
 - 비밀번호: Worker 설정 → 변수 및 시크릿 → `LOGIN_PASSWORD` (유형 **Secret**). 저장소에는 절대 적지 않습니다.
 - 로그인한 사람은 모두 관리자입니다(계약서·서명 모두 편집). 로그인은 30일 유지되고, 비밀번호를 바꾸면 모두 다시 로그인합니다.
 - (선택) 직원용 보기 전용 계정이 필요하면 `STAFF_PASSWORD` 를 추가하면 비밀번호만으로 서명 보기·복사 전용으로 들어옵니다.
@@ -67,7 +67,7 @@ npx wrangler d1 execute opk-tools --remote --file=seed.sql
 ## 로컬에서 돌려보기
 
 ```bash
-printf 'LOGIN_PASSWORD=local-test\n' > .dev.vars   # 아이디 opkvitooladmin
+printf 'LOGIN_PASSWORD=local-test\n' > .dev.vars   # 아이디 admin
 npm run db:init:local
 npm run dev     # http://127.0.0.1:8787
 ```

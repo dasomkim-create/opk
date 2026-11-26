@@ -28,4 +28,4 @@ ADMIN_EMAILS = ""
 ANTHROPIC_MODEL = "claude-sonnet-4-5"
 WORKERS_AI_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct"
 # 로그인 아이디 (비밀번호는 Worker 설정 → 변수 및 시크릿 → LOGIN_PASSWORD 에 Secret 으로만 넣기)
-LOGIN_ID = "opkvitooladmin"
+LOGIN_ID = "admin"
