@@ -1,6 +1,6 @@
 /* ---------- 조직도: 이름·직함·부서 자동완성 ---------- */
 const DEFAULT_ORG = [
-  {nameKo: '이정실', nameEn: 'Lee Jungsil', titleKo: '대표', titleEn: 'CEO', deptKo: '경영', deptEn: 'Management', logo: 'system_hor'},
+  {nameKo: '이정실', nameEn: 'Lee Jungsil', titleKo: '대표', titleEn: 'CEO', deptKo: '경영', deptEn: 'Management', logo: 'system_tagline'},
   {nameKo: '최승원', nameEn: 'Choi Seungwon', titleKo: 'CFO', titleEn: 'Chief Financial Officer', deptKo: '재무', deptEn: 'Finance'},
   {nameKo: '', nameEn: 'Kim S H', titleKo: 'CTO', titleEn: 'Chief Technology Officer', deptKo: '중문 상품 개발', deptEn: 'Door Product Development'},
   {nameKo: '성준호', nameEn: 'Seong Junho', titleKo: 'COO', titleEn: 'Chief Operating Officer', deptKo: '운영', deptEn: 'Operations'},
@@ -50,7 +50,7 @@ function attachCombos(form){
   const people = () => orgList().map(p => ({key: [p.nameKo, p.nameEn, p.deptKo, p.titleKo].join(' '), main: p.nameKo || p.nameEn, sub: [p.titleKo, p.deptKo].filter(Boolean).join(' · '), p}));
   const nm = form.querySelector('[data-k="nameKo"]');
   if (nm) combo(nm, people, it => { const p = it.p; ['nameKo', 'nameEn', 'titleKo', 'titleEn', 'deptKo', 'deptEn'].forEach(k => { if (p[k]) put(k, p[k]); });
-    if (p.logo && LOGOS.some(l => l.id === p.logo)) { cur.logo = p.logo; form.querySelectorAll('#lgs .lg').forEach(x => x.classList.toggle('on', x.dataset.g === p.logo)); }
+    const pl = normLogo(p.logo); if (pl && LOGOS.some(l => l.id === pl)) { cur.logo = pl; form.querySelectorAll('#lgs .lg').forEach(x => x.classList.toggle('on', x.dataset.g === pl)); }
     done(); toast(`${p.nameKo || p.nameEn} 정보를 채웠어요. 연락처·메일만 넣으면 돼요.`); });
   const tl = form.querySelector('[data-k="titleKo"]');
   if (tl) combo(tl, () => uniqPairs(TITLES, orgList().map(p => [p.titleKo, p.titleEn])).map(([k, e]) => ({key: k + ' ' + e, main: k, sub: e, k, e})), it => { put('titleKo', it.k); if (it.e) put('titleEn', it.e); done(); });

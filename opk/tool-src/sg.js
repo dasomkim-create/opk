@@ -2,14 +2,13 @@
 {
 const LOGOS = [
   {id:'korea_hor', brand:'OPK KOREA', v:'가로', file:'logos/korea_hor.png', w:439, h:160},
-  {id:'korea_stack', brand:'OPK KOREA', v:'세로', file:'logos/korea_stack.png', w:244, h:160},
-  {id:'system_hor', brand:'OPK SYSTEM', v:'가로', file:'logos/system_hor.png', w:539, h:160},
   {id:'system_tagline', brand:'OPK SYSTEM', v:'슬로건', file:'logos/system_tagline.png', w:421, h:160},
-  {id:'system_stack', brand:'OPK SYSTEM', v:'세로', file:'logos/system_stack.png', w:244, h:160},
-  {id:'master', brand:'OPK MASTER', v:'', file:'logos/master_v2.png', w:705, h:192},
-  {id:'de', brand:'OPK DE', v:'', file:'logos/de.png', w:504, h:160}
+  {id:'master', brand:'OPK MASTER', v:'', file:'logos/master_v2.png', w:705, h:192}
 ];
-const BRANDS = ['OPK KOREA','OPK SYSTEM','OPK MASTER','OPK DE'];
+const BRANDS = ['OPK KOREA','OPK SYSTEM','OPK MASTER'];
+// 정리한 로고(세로형·SYSTEM 가로·DE)로 저장된 서명은 가장 가까운 로고로 (그림 파일은 이미 붙여 둔 서명 때문에 서버에 남겨 둠)
+const LOGO_OLD = {korea_stack: 'korea_hor', system_hor: 'system_tagline', system_stack: 'system_tagline', de: 'korea_hor'};
+const normLogo = id => LOGO_OLD[id] || id;
 const LAYOUTS = [
   {id:'bi', name:'국영문 병기형', d:'해외 거래처와 주고받을 때'},
   {id:'basic', name:'기본형', d:'국문 표준 서명'},
@@ -28,12 +27,12 @@ let sigs = {}, co = {...DEF_CO}, cur = null, dirty = false, saving = false, quer
 const DATA = {};
 
 /* ---------- storage ---------- */
-function loadLocal(){ try { const v = JSON.parse(localStorage.getItem('opk-sigs') || '{}'); sigs = v.sigs || {}; co = {...DEF_CO, ...(v.co || {})}; } catch { sigs = {}; } }
+function loadLocal(){ try { const v = JSON.parse(localStorage.getItem('opk-sigs') || '{}'); sigs = v.sigs || {}; co = {...DEF_CO, ...(v.co || {})}; co.logo = normLogo(co.logo); } catch { sigs = {}; } }
 function saveLocal(){ try { localStorage.setItem('opk-sigs', JSON.stringify({sigs, co})); return true; } catch { return false; } }
 async function putSig(id, data){ if (db) await db.doc('signatures/' + id).set(data); else { sigs[id] = data; if (!saveLocal()) throw new Error('local'); } }
 async function delSig(id){ if (db) await db.doc('signatures/' + id).delete(); else { delete sigs[id]; saveLocal(); } }
 async function putCo(data){ if (db) await db.doc('settings/company').set(data); else { co = data; saveLocal(); } }
-function cleanSig(v){ const o = {}; [...FIELDS_P, ...FIELDS_C].forEach(k => o[k] = String(v?.[k] ?? '').slice(0, 200)); o.layout = LAYOUTS.some(l => l.id === v?.layout) ? v.layout : 'bi'; o.logo = v?.logo === '' || LOGOS.some(l => l.id === v?.logo) ? v.logo : 'korea_hor'; o.logoH = Math.max(24, Math.min(72, +v?.logoH || 44)); o.updatedAt = String(v?.updatedAt || ''); return o; }
+function cleanSig(v){ const o = {}; [...FIELDS_P, ...FIELDS_C].forEach(k => o[k] = String(v?.[k] ?? '').slice(0, 200)); o.layout = LAYOUTS.some(l => l.id === v?.layout) ? v.layout : 'bi'; const lgId = normLogo(v?.logo); o.logo = lgId === '' || LOGOS.some(l => l.id === lgId) ? lgId : 'korea_hor'; o.logoH = Math.max(24, Math.min(72, +v?.logoH || 44)); o.updatedAt = String(v?.updatedAt || ''); return o; }
 
 /* ---------- helpers ---------- */
 let tt;
@@ -382,7 +381,7 @@ loadLocal(); route();
       else if (cur && first && !dirty && !cur.isNew) renderEditor(cur.id);
       first = false;
     }, () => { clearTimeout(timer); toast('저장소에 연결하지 못했어요. 이 브라우저에만 저장돼요.'); db = null; local = true; loadLocal(); if (!cur) renderHome(); });
-    db.doc('settings/company').onSnapshot(doc => { let v = null; try { v = doc?.data?.() || null; } catch {} if (v) co = {...DEF_CO, ...v, urls: {...(v.urls || {})}}; if (cur) paint(); }, () => {});
+    db.doc('settings/company').onSnapshot(doc => { let v = null; try { v = doc?.data?.() || null; } catch {} if (v) { co = {...DEF_CO, ...v, urls: {...(v.urls || {})}}; co.logo = normLogo(co.logo); } if (cur) paint(); }, () => {});
   } else if (!cur) route();
 })();
 }
