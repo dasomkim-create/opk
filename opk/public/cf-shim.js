@@ -29,14 +29,14 @@
     wrap.innerHTML = `<form style="width:min(360px,100%);display:flex;flex-direction:column;gap:14px;font:15px/1.55 Pretendard,sans-serif;color:var(--ink,#111)">
       <svg viewBox="0 0 194.7 135.5" style="width:64px;height:44px" aria-hidden="true"><path fill="currentColor" d="M38.8,32.3c14.9,0,27,12.1,27,27c0,12.9-9,23.6-21.1,26.3V73.3c5.5-2.3,9.3-7.7,9.3-14c0-8.4-6.8-15.2-15.2-15.2c-8.4,0-15.2,6.8-15.2,15.2c0,6.3,3.9,11.7,9.3,14v12.3c-12.1-2.7-21.1-13.4-21.1-26.3C11.9,44.4,24,32.3,38.8,32.3z M98.6,44c8.4,0,15.2,6.8,15.2,15.2c0,8.4-6.8,15.2-15.2,15.2c-8.4,0-15.2-6.8-15.2-15.2C83.4,50.9,90.2,44,98.6,44z M83.4,81.5c4.3,3,9.6,4.7,15.2,4.7c14.9,0,27-12.1,27-27c0-14.9-12.1-27-27-27s-27,12.1-27,27v41.5c0,3.2,2.6,5.9,5.9,5.9c3.2,0,5.9-2.6,5.9-5.9V81.5z M137.3,11.9c3.2,0,5.9,2.6,5.9,5.9v30.1c4.3-9.2,13.6-15.6,24.5-15.6V44c-8.4,0-15.2,6.8-15.2,15.2s6.8,15.2,15.2,15.2v11.7c-10.8,0-20.2-6.4-24.5-15.6v9.7c0,3.2-2.6,5.9-5.9,5.9c-3.2,0-5.9-2.6-5.9-5.9V17.8C131.5,14.5,134.1,11.9,137.3,11.9z"/><path fill="#3FAF39" d="M167.6,44c8.4,0,15.2,6.8,15.2,15.2c0,8.4-6.8,15.2-15.2,15.2V44z"/></svg>
       <h1 style="margin:0;font-size:26px;line-height:1.2">OPK 업무 도구</h1>
-      ${setup ? '<p style="margin:0;color:var(--mute,#666)">아직 로그인 설정이 안 돼 있어요. 관리자가 Cloudflare에서 ADMIN_PASSWORD 와 STAFF_PASSWORD 를 넣으면 열려요.</p>'
-      : '<p style="margin:0;color:var(--mute,#666)">비밀번호를 넣어 주세요. 관리자 비밀번호로 들어오면 계약서도 열려요.</p><input type="password" required autocomplete="current-password" aria-label="비밀번호" style="height:48px;border:1px solid var(--line,#ddd);border-radius:10px;padding:0 14px;font-size:16px;background:var(--panel,#fff);color:inherit"><p class="err" style="margin:0;color:#c4363a;min-height:1.5em" aria-live="polite"></p><button style="height:48px;border:0;border-radius:999px;background:#6eb92b;color:#0d1a05;font-weight:700;font-size:15px;cursor:pointer">들어가기</button>'}
+      ${setup ? '<p style="margin:0;color:var(--mute,#666)">아직 로그인 설정이 안 돼 있어요. 관리자가 Cloudflare Worker 설정에서 LOGIN_PASSWORD 를 넣으면 열려요.</p>'
+      : '<p style="margin:0;color:var(--mute,#666)">아이디와 비밀번호를 넣어 주세요.</p><input name="id" required autocomplete="username" aria-label="아이디" placeholder="아이디" style="height:48px;border:1px solid var(--line,#ddd);border-radius:10px;padding:0 14px;font-size:16px;background:var(--panel,#fff);color:inherit"><input name="pw" type="password" required autocomplete="current-password" aria-label="비밀번호" placeholder="비밀번호" style="height:48px;border:1px solid var(--line,#ddd);border-radius:10px;padding:0 14px;font-size:16px;background:var(--panel,#fff);color:inherit"><p class="err" style="margin:0;color:#c4363a;min-height:1.5em" aria-live="polite"></p><button style="height:48px;border:0;border-radius:999px;background:#6eb92b;color:#0d1a05;font-weight:700;font-size:15px;cursor:pointer">들어가기</button>'}
     </form>`;
     document.body.appendChild(wrap);
-    const f = wrap.querySelector('form'), inp = f.querySelector('input');
-    if (inp) { inp.focus(); f.onsubmit = async ev => { ev.preventDefault(); const er = f.querySelector('.err'); er.textContent = '';
-      const r = await fetch('/api/login', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password: inp.value }) });
-      if (r.ok) location.reload(); else { er.textContent = '비밀번호가 맞지 않아요.'; inp.select(); } }; }
+    const f = wrap.querySelector('form'), idIn = f.querySelector('input[name=id]'), inp = f.querySelector('input[name=pw]');
+    if (inp) { idIn.focus(); f.onsubmit = async ev => { ev.preventDefault(); const er = f.querySelector('.err'); er.textContent = '';
+      const r = await fetch('/api/login', { method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ id: idIn.value, password: inp.value }) });
+      if (r.ok) location.reload(); else { er.textContent = '아이디 또는 비밀번호가 맞지 않아요.'; inp.select(); } }; }
     else f.onsubmit = ev => ev.preventDefault();
   }
   window.opkLogout = async () => { await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }); location.reload(); };
