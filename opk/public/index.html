@@ -114,6 +114,21 @@ body.navmin .main{margin-left:64px}
 #ct section.art>h2{cursor:pointer}
 .pg[data-lang=zh]{font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC","Noto Sans CJK SC","Source Han Sans SC",sans-serif}
 #sg .bad{font-size:12px;color:var(--warn)}
+#sg .combo{position:relative}
+#sg .combo input{padding-right:32px}
+#sg .combo::after{content:"";position:absolute;right:14px;bottom:19px;width:7px;height:7px;border-right:1.6px solid var(--mute);border-bottom:1.6px solid var(--mute);transform:rotate(45deg);pointer-events:none}
+#sg .cb{position:absolute;top:100%;left:0;right:0;min-width:240px;margin-top:4px;z-index:30;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px var(--shs);padding:4px;max-height:300px;overflow:auto}
+#sg .cb[hidden]{display:none}
+#sg .cb-i{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:9px 10px;border-radius:7px;cursor:pointer;font-size:14px;color:var(--ink)}
+#sg .cb-i small{color:var(--mute);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#sg .cb-i:hover,#sg .cb-i.on{background:var(--panel2)}
+#sg .org{display:flex;flex-direction:column;gap:6px;overflow-x:auto}
+#sg .org-h,#sg .org-r{display:grid;grid-template-columns:repeat(6,minmax(90px,1fr)) 64px;gap:6px;min-width:680px}
+#sg .org-h span{font-size:12px;color:var(--mute)}
+#sg .org-r input{height:38px;border-radius:8px;border:1px solid var(--line);background:var(--panel);padding:0 10px;font-size:14px;color:var(--ink)}
+#sg .org-r .btn{height:38px;padding:0 8px;font-size:13px}
+#ct .back,#sg .back{padding:0 10px 0 4px;margin-left:-6px;gap:2px}
+#ct .back svg,#sg .back svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 #sg .guide summary{cursor:pointer;list-style:revert}
 #sg .guide ol{margin:8px 0 0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
 #sg .guide b{color:var(--ink)}
@@ -801,7 +816,7 @@ function renderEditor(id){
   const c = get(id); if (!c) { location.hash = 'contracts'; return; }
   cur = {...c, pages: c.pages.slice(), en: (c.en || []).slice(), zh: (c.zh || []).slice()}; lang = 'ko'; dirty = false; hist = []; hi = -1; tblCell = null;
   app.innerHTML = `<div class="bar">
-    <button class="btn ghost" id="back" aria-label="목록으로">← 목록</button>
+    <button class="btn ghost back" id="back" aria-label="목록으로"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg>목록</button>
     <input class="title-in" id="tname" value="${esc(c.name)}" aria-label="계약서 이름" ${canWrite ? '' : 'readonly'}>
     <span class="chip" id="chip"><i></i><span>${canWrite ? '저장됨' : '보기 전용'}</span></span>
     <div class="lang" id="lang" role="group" aria-label="계약서 언어">${LANGS.map(([l, n]) => `<button data-lg="${l}" aria-label="${n}">${n}</button>`).join('')}</div>
@@ -1661,7 +1676,7 @@ function renderEditor(id){
   cur = isNew ? cleanSig({...co, layout: co.layout, logo: co.logo, logoH: co.logoH}) : cleanSig(sigs[id]);
   cur.id = isNew ? 's' + Date.now().toString(36) : id; cur.isNew = isNew; dirty = isNew;
   app.innerHTML = `<div class="bar">
-    <button class="btn ghost" id="back">← 목록</button>
+    <button class="btn ghost back" id="back" aria-label="목록으로"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg>목록</button>
     <b style="font-size:17px" id="who"></b>
     <span class="chip" id="chip"><i></i><span>${canWrite ? (isNew ? '새 서명' : '저장됨') : '보기·복사 전용'}</span></span>
     <span style="margin-left:auto"></span>
@@ -1730,6 +1745,7 @@ function renderEditor(id){
   $('#cpt').onclick = () => copyText(sigText(cur), '글자만 복사했어요.');
   $('#dlg').onclick = downloadLogo;
   paint();
+  attachCombos(form);
   if (isNew && canWrite) form.querySelector('[data-k="nameKo"]').focus();
 }
 function paint(){
@@ -1810,18 +1826,83 @@ async function dlAll(){
   } catch { toast('로고 묶음을 만들지 못했어요.'); }
 }
 
+/* ---------- 조직도: 이름·직함·부서 자동완성 ---------- */
+const DEFAULT_ORG = [
+  {nameKo: '이정실', nameEn: 'Lee Jungsil', titleKo: '대표', titleEn: 'CEO', deptKo: '경영', deptEn: 'Management', logo: 'system_hor'},
+  {nameKo: '최승원', nameEn: 'Choi Seungwon', titleKo: 'CFO', titleEn: 'Chief Financial Officer', deptKo: '재무', deptEn: 'Finance'},
+  {nameKo: '', nameEn: 'Kim S H', titleKo: 'CTO', titleEn: 'Chief Technology Officer', deptKo: '중문 상품 개발', deptEn: 'Door Product Development'},
+  {nameKo: '성준호', nameEn: 'Seong Junho', titleKo: 'COO', titleEn: 'Chief Operating Officer', deptKo: '운영', deptEn: 'Operations'},
+  {nameKo: '최미나', nameEn: 'Choi Mina', titleKo: '팀장', titleEn: 'Team Leader', deptKo: '운영팀 (기획·영상)', deptEn: 'Operations Team (Planning & Video)'},
+  {nameKo: '이지훈', nameEn: 'Lee Jihun', titleKo: '팀장', titleEn: 'Team Leader', deptKo: '운영팀 (기획·디자인)', deptEn: 'Operations Team (Planning & Design)'},
+  {nameKo: '이대곤', nameEn: 'Lee Daegon', titleKo: '팀장', titleEn: 'Team Leader', deptKo: '운영팀', deptEn: 'Operations Team'},
+  {nameKo: '최군', nameEn: 'Cui Jun', titleKo: '', titleEn: '', deptKo: 'OPK MASTER', deptEn: 'OPK MASTER', logo: 'master'},
+  {nameKo: '최경호', nameEn: 'Cui Qinghu', titleKo: '', titleEn: '', deptKo: '현장 지원·통역', deptEn: 'Field Support & Interpretation'},
+  {nameKo: '김다솜', nameEn: 'Kim Dasom', titleKo: '디자이너', titleEn: 'Designer', deptKo: 'UI/UX 디자인', deptEn: 'UI/UX Design'},
+  {nameKo: '권회현', nameEn: '', titleKo: '', titleEn: '', deptKo: 'AI 이미지·영상', deptEn: 'AI Image & Video'},
+  {nameKo: '수빈', nameEn: '', titleKo: '', titleEn: '', deptKo: '기획', deptEn: 'Planning'}
+];
+const TITLES = [['대표', 'CEO'], ['대표이사', 'CEO'], ['이사', 'Director'], ['부장', 'General Manager'], ['차장', 'Deputy General Manager'], ['과장', 'Manager'], ['대리', 'Assistant Manager'], ['주임', 'Senior Staff'], ['사원', 'Staff'], ['팀장', 'Team Leader'], ['실장', 'Head'], ['디자이너', 'Designer'], ['매니저', 'Manager'], ['인턴', 'Intern'], ['CFO', 'Chief Financial Officer'], ['COO', 'Chief Operating Officer'], ['CTO', 'Chief Technology Officer']];
+const DEPTS = [['경영', 'Management'], ['재무', 'Finance'], ['운영', 'Operations'], ['운영팀', 'Operations Team'], ['영업팀', 'Sales Team'], ['기획', 'Planning'], ['디자인팀', 'Design Team'], ['UI/UX 디자인', 'UI/UX Design'], ['마케팅', 'Marketing'], ['중문 상품 개발', 'Door Product Development'], ['현장 지원·통역', 'Field Support & Interpretation'], ['AI 이미지·영상', 'AI Image & Video'], ['OPK MASTER', 'OPK MASTER']];
+const orgList = () => (Array.isArray(co.org) && co.org.length ? co.org : DEFAULT_ORG);
+const uniqPairs = (base, extra) => { const m = new Map(); [...base, ...extra].forEach(([k, e]) => { if (k && !m.has(k)) m.set(k, e || ''); }); return [...m]; };
+function matchQ(text, q){ const t = squash(text), k = squash(q); if (!k) return true; if (t.includes(k)) return true; return /^[ㄱ-ㅎ]+$/.test(k) && cho(t).includes(k); }
+function combo(input, source, onPick){
+  const wrap = input.parentElement; wrap.classList.add('combo');
+  const box = document.createElement('div'); box.className = 'cb'; box.hidden = true; box.setAttribute('role', 'listbox'); box.id = 'cb-' + input.dataset.k; wrap.appendChild(box);
+  input.setAttribute('role', 'combobox'); input.setAttribute('aria-autocomplete', 'list'); input.setAttribute('aria-expanded', 'false'); input.setAttribute('aria-controls', box.id);
+  let items = [], idx = -1;
+  const close = () => { box.hidden = true; idx = -1; input.setAttribute('aria-expanded', 'false'); };
+  const render = () => {
+    items = source().filter(it => matchQ(it.key, input.value)).slice(0, 12);
+    if (!items.length) { close(); return; }
+    box.innerHTML = items.map((it, i) => `<div class="cb-i${i === idx ? ' on' : ''}" role="option" aria-selected="${i === idx}" data-i="${i}"><span>${esc(it.main)}</span>${it.sub ? `<small>${esc(it.sub)}</small>` : ''}</div>`).join('');
+    box.hidden = false; input.setAttribute('aria-expanded', 'true');
+    box.querySelector('.on')?.scrollIntoView({block: 'nearest'});
+  };
+  input.addEventListener('focus', () => { idx = -1; render(); });
+  input.addEventListener('input', () => { idx = -1; render(); });
+  input.addEventListener('keydown', e => {
+    if (box.hidden) { if (e.key === 'ArrowDown') { render(); e.preventDefault(); } return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); idx = Math.min(items.length - 1, idx + 1); render(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); idx = Math.max(0, idx - 1); render(); }
+    else if (e.key === 'Enter' && idx >= 0) { e.preventDefault(); onPick(items[idx]); close(); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(); }
+  });
+  input.addEventListener('blur', () => setTimeout(close, 120));
+  box.addEventListener('mousedown', e => { const el = e.target.closest('[data-i]'); if (!el) return; e.preventDefault(); onPick(items[+el.dataset.i]); close(); });
+}
+function attachCombos(form){
+  if (!canWrite) return;
+  const put = (k, v) => { if (v === undefined) return; cur[k] = v; const i = form.querySelector(`[data-k="${k}"]`); if (i) i.value = v; };
+  const done = () => { markDirty(); paint(); };
+  const people = () => orgList().map(p => ({key: [p.nameKo, p.nameEn, p.deptKo, p.titleKo].join(' '), main: p.nameKo || p.nameEn, sub: [p.titleKo, p.deptKo].filter(Boolean).join(' · '), p}));
+  const nm = form.querySelector('[data-k="nameKo"]');
+  if (nm) combo(nm, people, it => { const p = it.p; ['nameKo', 'nameEn', 'titleKo', 'titleEn', 'deptKo', 'deptEn'].forEach(k => { if (p[k]) put(k, p[k]); });
+    if (p.logo && LOGOS.some(l => l.id === p.logo)) { cur.logo = p.logo; form.querySelectorAll('#lgs .lg').forEach(x => x.classList.toggle('on', x.dataset.g === p.logo)); }
+    done(); toast(`${p.nameKo || p.nameEn} 정보를 채웠어요. 연락처·메일만 넣으면 돼요.`); });
+  const tl = form.querySelector('[data-k="titleKo"]');
+  if (tl) combo(tl, () => uniqPairs(TITLES, orgList().map(p => [p.titleKo, p.titleEn])).map(([k, e]) => ({key: k + ' ' + e, main: k, sub: e, k, e})), it => { put('titleKo', it.k); if (it.e) put('titleEn', it.e); done(); });
+  const dp = form.querySelector('[data-k="deptKo"]');
+  if (dp) combo(dp, () => uniqPairs(DEPTS, orgList().map(p => [p.deptKo, p.deptEn])).map(([k, e]) => ({key: k + ' ' + e, main: k, sub: e, k, e})), it => { put('deptKo', it.k); if (it.e) put('deptEn', it.e); done(); });
+}
+function orgEditorHTML(rows){
+  const F = [['nameKo', '이름'], ['nameEn', '영문 이름'], ['titleKo', '직함'], ['titleEn', '영문 직함'], ['deptKo', '부서'], ['deptEn', '영문 부서']];
+  return `<div class="org"><div class="org-h">${F.map(f => `<span>${f[1]}</span>`).join('')}<span></span></div>${rows.map((p, i) => `<div class="org-r">${F.map(([k, l]) => `<input data-o="${i}:${k}" value="${esc(p[k] || '')}" aria-label="${l}" ${canWrite ? '' : 'readonly'}>`).join('')}${canWrite ? `<button type="button" class="btn ghost" data-odel="${i}" aria-label="${esc(p.nameKo || p.nameEn || '이 줄')} 빼기">빼기</button>` : '<span></span>'}</div>`).join('')}</div>${canWrite ? '<button type="button" class="btn" id="oadd">+ 사람 추가</button>' : ''}`;
+}
+
 /* ---------- company settings ---------- */
 function renderCompany(){
   cur = null; dirty = false;
-  const c = {...co, urls: {...(co.urls || {})}};
+  const c = {...co, urls: {...(co.urls || {})}, org: orgList().map(p => ({...p}))};
   const f = (k, label, ph, type = 'text') => `<label class="f"><span>${label}</span><input data-c="${k}" type="${type}" value="${esc(c[k])}" placeholder="${esc(ph)}" ${canWrite ? '' : 'readonly'}></label>`;
-  app.innerHTML = `<div class="bar"><button class="btn ghost" id="back">← 목록</button><b style="font-size:17px">회사 공통 정보</b><span style="margin-left:auto"></span>${canWrite ? '<button class="btn" id="apply">모든 서명에 적용</button><button class="btn pri" id="csave">저장</button>' : ''}</div>
+  app.innerHTML = `<div class="bar"><button class="btn ghost back" id="back" aria-label="목록으로"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 4.5 7 10l5.5 5.5"/></svg>목록</button><b style="font-size:17px">회사 공통 정보</b><span style="margin-left:auto"></span>${canWrite ? '<button class="btn" id="apply">모든 서명에 적용</button><button class="btn pri" id="csave">저장</button>' : ''}</div>
   <main class="set"><div><h1>회사 공통 정보</h1><p class="sub" style="margin:8px 0 0">새 서명에 미리 채워지는 값이에요. 모든 서명에 적용하면 사람마다 넣은 이름·연락처는 그대로 두고 회사 정보만 바꿔요.</p></div>
     <div class="grp"><h4>회사</h4><div class="row2">${f('tel', 'T. 회사 전화', '+82-31-000-0000', 'tel')}${f('fax', 'F. 팩스', '', 'tel')}</div><div class="row2">${f('companyKo', '회사명', '오피케이코리아')}${f('companyEn', '영문 회사명', 'OPK KOREA')}</div>
       ${f('addrKo', '주소', '')}${f('addrEn', '영문 주소', '')}${f('web', '웹사이트', 'www.company.co.kr', 'url')}
       ${f('tagline', '대외용 한 줄 소개', '국문 대외용에 들어가요. 영문 소개가 비어 있으면 국영문 대외용에도 들어가요')}
       <div class="row2">${f('linkLabel', '대외용 링크 글자', '회사소개서 바로가기')}${f('linkUrl', '링크 주소', 'https://…', 'url')}</div>
       <div class="row2">${f('taglineEn', '영문 한 줄 소개 (국영문 대외용)', 'Sliding Door & Window System Expert')}${f('linkLabelEn', '영문 링크 글자 (국영문 대외용)', 'Company Profile')}</div></div>
+    <div class="grp"><h4>조직도 (이름·직함·부서 자동완성에 쓰여요)</h4><div id="orgw">${orgEditorHTML(c.org)}</div></div>
     <div class="grp"><h4>새 서명 기본값</h4><div class="seg" id="clay">${LAYOUTS.map(l => `<button type="button" data-l="${l.id}" class="${c.layout === l.id ? 'on' : ''}"><b>${l.name}</b><small>${l.d}</small></button>`).join('')}</div>
       <div class="logos" id="clgs">${LOGOS.map(l => `<button type="button" class="lg${c.logo === l.id ? ' on' : ''}" data-g="${l.id}"><img src="${l.file}" alt=""><small>${esc(l.brand)} ${esc(l.v)}</small></button>`).join('')}<button type="button" class="lg none${c.logo === '' ? ' on' : ''}" data-g="">로고 없이</button></div></div>
     <div class="grp"><div class="inline" style="justify-content:space-between"><h4 style="margin:0;font-size:13px;color:var(--mute)">로고 파일 · 공개 주소 (선택)</h4><button type="button" class="btn" id="dlAll">로고 모두 받기 (ZIP)</button></div>
@@ -1831,11 +1912,15 @@ function renderCompany(){
   app.querySelectorAll('[data-c]').forEach(i => i.oninput = () => { c[i.dataset.c] = i.value; });
   const chk = i => { const v = i.value.trim(); app.querySelector(`[data-bad="${i.dataset.u}"]`).textContent = v && !imgUrl(v) ? '이미지 파일 주소가 아니에요. 홈페이지 주소 말고 …/로고.png 처럼 파일 주소를 넣어 주세요. 이 값은 쓰지 않아요.' : ''; };
   app.querySelectorAll('[data-u]').forEach(i => { chk(i); i.oninput = () => { c.urls[i.dataset.u] = i.value.trim(); chk(i); }; });
+  const orgw = $('#orgw');
+  const orgRe = () => { orgw.innerHTML = orgEditorHTML(c.org); bindOrg(); };
+  const bindOrg = () => { orgw.querySelectorAll('[data-o]').forEach(i => i.oninput = () => { const [n, k] = i.dataset.o.split(':'); c.org[+n][k] = i.value; }); orgw.querySelectorAll('[data-odel]').forEach(b => b.onclick = () => { c.org.splice(+b.dataset.odel, 1); orgRe(); }); const a = $('#oadd'); if (a) a.onclick = () => { c.org.push({nameKo: '', nameEn: '', titleKo: '', titleEn: '', deptKo: '', deptEn: ''}); orgRe(); orgw.querySelector('.org-r:last-child input')?.focus(); }; };
+  bindOrg();
   $('#dlAll').onclick = dlAll; app.querySelectorAll('[data-dl]').forEach(b => b.onclick = () => dlOne(b.dataset.dl));
   $('#clay').onclick = e => { const b = e.target.closest('[data-l]'); if (!b || !canWrite) return; c.layout = b.dataset.l; $('#clay').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); };
   $('#clgs').onclick = e => { const b = e.target.closest('[data-g]'); if (!b || !canWrite) return; c.logo = b.dataset.g; $('#clgs').querySelectorAll('.lg').forEach(x => x.classList.toggle('on', x === b)); };
   $('#back').onclick = () => { location.hash = 'sign'; };
-  const clean = () => { const o = {...DEF_CO}; FIELDS_C.forEach(k => o[k] = String(c[k] || '').slice(0, 200)); o.layout = c.layout; o.logo = c.logo; o.logoH = c.logoH || 44; o.urls = {}; LOGOS.forEach(l => { const u = imgUrl(c.urls[l.id]); if (u) o.urls[l.id] = u; }); return o; };
+  const clean = () => { const o = {...DEF_CO}; FIELDS_C.forEach(k => o[k] = String(c[k] || '').slice(0, 200)); o.layout = c.layout; o.logo = c.logo; o.logoH = c.logoH || 44; o.org = (c.org || []).filter(p => p.nameKo || p.nameEn).map(p => { const q = {}; ['nameKo','nameEn','titleKo','titleEn','deptKo','deptEn','logo'].forEach(k => { if (p[k]) q[k] = String(p[k]).slice(0, 80); }); return q; }); o.urls = {}; LOGOS.forEach(l => { const u = imgUrl(c.urls[l.id]); if (u) o.urls[l.id] = u; }); return o; };
   const cs = $('#csave'); if (cs) cs.onclick = async () => { try { const o = clean(); await putCo(o); co = o; toast('저장했어요.'); } catch { toast('저장하지 못했어요.'); } };
   const ap = $('#apply'); if (ap) ap.onclick = async () => {
     const n = Object.keys(sigs).length; if (!n) { toast('아직 서명이 없어요.'); return; }
