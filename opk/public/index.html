@@ -32,7 +32,7 @@ button,input,select{font:inherit;color:inherit}
 button{cursor:pointer}
 .nav{position:fixed;left:0;top:0;bottom:0;width:208px;z-index:40;display:flex;flex-direction:column;gap:4px;padding:18px 12px;background:var(--navbg);border-right:1px solid var(--line)}
 .nav .logo{display:flex;align-items:center;gap:10px;padding:2px 10px 18px}
-.nav .logo svg{width:44px;height:30px;flex:none}
+.nav .logo>svg{width:44px;height:30px;flex:none}
 .nav .logo b{font-size:15px;line-height:1.2}
 .nav a{display:flex;align-items:center;gap:10px;height:44px;padding:0 12px;border-radius:10px;color:var(--mute);text-decoration:none;font-weight:600;font-size:14px}
 .nav a:hover{color:var(--ink);background:var(--panel2)}
@@ -51,7 +51,7 @@ button{cursor:pointer}
 .nav .logo{position:relative}
 .navtg{margin-left:auto;width:36px;height:36px;flex:none;display:grid;place-items:center;border:0;border-radius:8px;background:none;color:var(--mute)}
 .navtg:hover{color:var(--ink);background:var(--panel2)}
-.navtg svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.nav .logo .navtg svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 .btn{justify-content:center;color:var(--ink)}
 .btn.pri{color:#0d1a05}
 .dlg .row .btn{min-width:72px}
@@ -77,7 +77,28 @@ body.navmin .main{margin-left:64px}
 #ct .lang button.miss{opacity:.55}
 #ct .menu-list .mh{margin:4px 12px 4px;font-size:12px;color:var(--mute)}
 #ct .menu-list hr{border:0;border-top:1px solid var(--line);margin:6px}
-#ct .ftb{max-width:min(560px,calc(100vw - 16px))}
+
+#ct #ftb{flex-direction:column;align-items:stretch;gap:0;padding:4px;max-width:calc(100vw - 16px);width:max-content;border-radius:12px;box-shadow:0 2px 10px var(--shs)}
+#ct #ftb .fr{display:flex;align-items:center;gap:2px;flex-wrap:nowrap;padding:2px}
+#ct #ftb .fr[hidden]{display:none}
+#ct #ftb .fr+.fr{border-top:1px solid var(--line);margin-top:2px;padding-top:4px}
+#ct #ftb button{white-space:nowrap;flex:none;height:32px;min-width:32px;padding:0 6px;border:0;background:transparent;border-radius:7px;font:600 12px "Pretendard",sans-serif;color:var(--ink);display:inline-flex;align-items:center;justify-content:center;gap:2px}
+#ct #ftb button:hover,#ct #ftb button[aria-expanded=true]{background:var(--panel2)}
+#ct #ftb button svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+#ct #ftb button svg.car{width:10px;height:10px;opacity:.6}
+#ct #ftb .sep{width:1px;height:20px;background:var(--line);margin:0 4px;flex:none}
+#ct #ftb .lab{font-size:11px;color:var(--mute);margin:0 2px 0 4px;white-space:nowrap}
+#ct #ftb .pop{position:relative;display:inline-flex}
+#ct #ftb .pp{position:absolute;top:38px;right:0;z-index:5;display:flex;gap:6px;align-items:center;width:max-content;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 10px;box-shadow:0 6px 20px var(--shs)}
+#ct #ftb .pp[hidden]{display:none}
+#ct #ftb .pp .sw{width:22px;height:22px;min-width:0;padding:0;border-radius:50%;border:1px solid var(--line2)}
+#ct #ftb .pp .sw:hover{transform:scale(1.12);background-clip:padding-box}
+#ct #ftb .pp .txt{height:26px;border:1px solid var(--line);padding:0 8px}
+#ct #ftb #fsz{width:46px;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);color:var(--ink);font:600 13px "Pretendard",sans-serif;text-align:center;padding:0 2px;-moz-appearance:textfield}
+#ct #ftb #fsz::-webkit-inner-spin-button,#ct #ftb #fsz::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+#ct #ftb #fsz:focus{outline:2px solid var(--green);outline-offset:-1px}
+#ct #ftb select{height:28px;border-radius:7px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);font:600 12px "Pretendard",sans-serif;padding:0 4px}
+
 #ct .ftb .ic{width:32px;padding:0;display:grid;place-items:center}
 #ct .ftb .ic svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
 #ct .ftb .tg[hidden]{display:none}
@@ -793,7 +814,33 @@ function renderEditor(id){
     <div class="desk" id="desk"></div>
   </div>
   <div class="tbt stb" id="stb" hidden role="toolbar" aria-label="조항 편집"><div class="tg"><span>조항</span><button data-s="add" title="아래에 새 조항 추가">+ 조항</button><button data-s="table" title="이 조항에 표 넣기">+ 표</button><button data-s="up" title="위로 옮기기">↑</button><button data-s="down" title="아래로 옮기기">↓</button><button data-s="del" title="조항 삭제">삭제</button></div></div>
-  <div class="tbt ftb" id="ftb" hidden role="toolbar" aria-label="글자 서식"><div class="tg"><span>글자</span><button data-f="bold" title="굵게 (Ctrl+B)" aria-label="굵게"><b>B</b></button><button data-f="down" title="작게" aria-label="글자 작게">가−</button><button data-f="up" title="크게" aria-label="글자 크게">가+</button></div><div class="tg"><span>정렬</span><button class="ic" data-f="left" title="왼쪽 정렬" aria-label="왼쪽 정렬"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 9h9M3 13h14M3 17h9"/></svg></button><button class="ic" data-f="center" title="가운데 정렬" aria-label="가운데 정렬"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M5.5 9h9M3 13h14M5.5 17h9"/></svg></button><button class="ic" data-f="right" title="오른쪽 정렬" aria-label="오른쪽 정렬"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M8 9h9M3 13h14M8 17h9"/></svg></button></div><div class="tg"><span>색</span>${['#111111','#555555','#4a8a1a','#c4363a','#1f5fbf'].map(col => `<button class="sw" data-c="${col}" style="background:${col}" title="${col}" aria-label="${col} 글자색"></button>`).join('')}<button data-c="" title="기본색">기본</button></div><div class="tg tbl" hidden><span>행</span><button data-t="rowup" title="위에 행 추가">↑ 추가</button><button data-t="rowdn" title="아래에 행 추가">↓ 추가</button><button data-t="rowdel" title="행 삭제">삭제</button></div><div class="tg tbl" hidden><span>열</span><button data-t="colL" title="왼쪽에 열 추가">← 추가</button><button data-t="colR" title="오른쪽에 열 추가">→ 추가</button><button data-t="coldel" title="열 삭제">삭제</button></div><div class="tg tbl" hidden><span>칸 색</span><select id="scope2" aria-label="칸 색 칠할 범위"><option value="cell">칸</option><option value="row">행</option><option value="col">열</option></select>${['#ffffff','#f5f5f5','#eef5e7','#dceccd','#fff6dc','#fde8e8','#e7eefa'].map(col => `<button class="sw" data-bg="${col}" style="background:${col}" title="${col}" aria-label="${col} 칸 칠하기"></button>`).join('')}<button data-bg="" title="칸 색 지우기">없음</button></div></div>
+  <div class="tbt ftb" id="ftb" hidden role="toolbar" aria-label="서식">
+  <div class="fr">
+    <button data-f="bold" class="ic" title="굵게 (Ctrl+B)" aria-label="굵게"><b style="font-size:14px">B</b></button>
+    <button data-f="down" class="ic" title="글자 작게" aria-label="글자 작게"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h10"/></svg></button><input id="fsz" type="number" min="8" max="48" step="1" inputmode="numeric" title="글자 크기 (px) — 숫자를 넣고 Enter" aria-label="글자 크기"><button data-f="up" class="ic" title="글자 크게" aria-label="글자 크게"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h10M10 5v10"/></svg></button>
+    <span class="sep"></span>
+    <button class="ic" data-f="left" title="왼쪽 정렬" aria-label="왼쪽 정렬"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 9h9M3 13h14M3 17h9"/></svg></button>
+    <button class="ic" data-f="center" title="가운데 정렬" aria-label="가운데 정렬"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M5.5 9h9M3 13h14M5.5 17h9"/></svg></button>
+    <button class="ic" data-f="right" title="오른쪽 정렬" aria-label="오른쪽 정렬"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M8 9h9M3 13h14M8 17h9"/></svg></button>
+    <span class="sep"></span>
+    <span class="pop"><button class="ic wide" data-pop="fc" title="글자색" aria-label="글자색" aria-haspopup="true"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M6 13l4-9 4 9M7.3 10h5.4"/><rect x="4" y="15.5" width="12" height="2.5" rx="1" fill="#4a8a1a" stroke="none"/></svg><svg class="car" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4l3 3 3-3"/></svg></button>
+      <span class="pp" hidden><span class="lab">글자색</span>${[['#111111','검정'],['#555555','회색'],['#4a8a1a','초록'],['#c4363a','빨강'],['#1f5fbf','파랑']].map(([col, n]) => `<button class="sw" data-c="${col}" style="background:${col}" title="${n}" aria-label="${n} 글자색"></button>`).join('')}<button class="txt" data-c="" title="기본색">기본</button></span></span>
+  </div>
+  <div class="fr tbl" hidden>
+    <span class="lab">행</span>
+    <button class="ic" data-t="rowup" title="위에 행 추가" aria-label="위에 행 추가"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="10" width="14" height="7" rx="1"/><path d="M10 2.5v5M7.5 5h5"/></svg></button>
+    <button class="ic" data-t="rowdn" title="아래에 행 추가" aria-label="아래에 행 추가"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="14" height="7" rx="1"/><path d="M10 12.5v5M7.5 15h5"/></svg></button>
+    <button class="ic" data-t="rowdel" title="행 삭제" aria-label="행 삭제"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="6.5" width="14" height="7" rx="1"/><path d="M8 8.5l4 3M12 8.5l-4 3"/></svg></button>
+    <span class="sep"></span>
+    <span class="lab">열</span>
+    <button class="ic" data-t="colL" title="왼쪽에 열 추가" aria-label="왼쪽에 열 추가"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="10" y="3" width="7" height="14" rx="1"/><path d="M2.5 10h5M5 7.5v5"/></svg></button>
+    <button class="ic" data-t="colR" title="오른쪽에 열 추가" aria-label="오른쪽에 열 추가"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="3" width="7" height="14" rx="1"/><path d="M12.5 10h5M15 7.5v5"/></svg></button>
+    <button class="ic" data-t="coldel" title="열 삭제" aria-label="열 삭제"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="6.5" y="3" width="7" height="14" rx="1"/><path d="M8.5 8l3 4M11.5 8l-3 4"/></svg></button>
+    <span class="sep"></span>
+    <span class="pop"><button class="ic wide" data-pop="bg" title="칸 배경색" aria-label="칸 배경색" aria-haspopup="true"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 11l6-7 6 7-6 6z"/><path d="M16.5 13.5c0 1.5 1.5 1.5 1.5 0l-.75-1.5z" fill="currentColor"/></svg><span style="font-size:12px">칸 색</span><svg class="car" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 4l3 3 3-3"/></svg></button>
+      <span class="pp" hidden><select id="scope2" aria-label="칠할 범위"><option value="cell">이 칸</option><option value="row">이 행</option><option value="col">이 열</option></select>${['#ffffff','#f5f5f5','#eef5e7','#dceccd','#fff6dc','#fde8e8','#e7eefa'].map(col => `<button class="sw" data-bg="${col}" style="background:${col}" title="${col}" aria-label="${col} 칸 칠하기"></button>`).join('')}<button class="txt" data-bg="" title="칸 색 지우기">없음</button></span></span>
+  </div>
+</div>
   <div class="findbar" id="fb" hidden role="search"><input id="fq" type="search" placeholder="계약서 안에서 찾기" aria-label="계약서 안에서 찾기" autocomplete="off"><span class="cnt" id="fn"></span><button id="fprev" aria-label="이전 결과">↑</button><button id="fnext" aria-label="다음 결과">↓</button><button id="fx" aria-label="찾기 닫기">×</button></div>
   <div class="tbt" id="tt" hidden role="toolbar" aria-label="표 편집">
     <div class="tg"><span>행</span><button data-t="rowup" title="위에 행 추가">↑ 추가</button><button data-t="rowdn" title="아래에 행 추가">↓ 추가</button><button data-t="rowdel" title="행 삭제">삭제</button></div>
@@ -1003,30 +1050,37 @@ async function makePdfImg(){
 
 /* ---------- floating text toolbar ---------- */
 let ftbEl = null;
-function hideFTB(){ const b = $('#ftb'); if (b) b.hidden = true; ftbEl = null; }
+function hideFTB(){ const b = $('#ftb'); if (b) { b.hidden = true; b.querySelectorAll('.pp').forEach(x => x.hidden = true); } ftbEl = null; }
 function placeFTB(){
   const b = $('#ftb'); if (!b || !ftbEl || !ftbEl.isConnected) { hideFTB(); return; }
   const r = ftbEl.getBoundingClientRect(), h = b.offsetHeight || 44;
   let top = r.bottom + 8; if (top + h > innerHeight - 8) top = Math.max(70, r.top - h - 8);
   b.style.top = top + 'px'; b.style.left = Math.max(8, Math.min(r.left, innerWidth - b.offsetWidth - 8)) + 'px';
 }
-function showFTB(el){ const b = $('#ftb'); if (!b || !canWrite || !editOn) return; ftbEl = el; b.querySelectorAll('.tbl').forEach(g => g.hidden = !el.closest('table.t')); b.hidden = false; placeFTB(); }
+function showFTB(el){ const b = $('#ftb'); if (!b || !canWrite || !editOn) return; ftbEl = el; const fz = $('#fsz'); if (fz && document.activeElement !== fz) fz.value = Math.round(parseFloat(getComputedStyle(el).fontSize) || 12); b.querySelectorAll('.tbl').forEach(g => g.hidden = !el.closest('table.t')); b.hidden = false; placeFTB(); }
 function ftbApply(fn){ const el = ftbEl && ftbEl.isConnected ? ftbEl : null; if (!el) return; flushPend(); fn(el, getSelection()); pushHist(); markDirty(); refreshThumbs(); placeFTB(); }
 function wireFTB(){
   const b = $('#ftb'), desk = $('#desk'); if (!b || !desk) return;
   b.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
   b.addEventListener('click', e => {
     const t = e.target.closest('button'); if (!t) return; const op = t.dataset.f;
+    if (t.dataset.pop) { const pp = t.parentElement.querySelector('.pp'), open = pp.hidden; b.querySelectorAll('.pp').forEach(x => x.hidden = true); b.querySelectorAll('[data-pop]').forEach(x => x.setAttribute('aria-expanded', 'false')); pp.hidden = !open; t.setAttribute('aria-expanded', String(open)); placeFTB(); return; }
+    if ('c' in t.dataset || 'bg' in t.dataset) { b.querySelectorAll('.pp').forEach(x => x.hidden = true); b.querySelectorAll('[data-pop]').forEach(x => x.setAttribute('aria-expanded', 'false')); }
     if (t.dataset.t) { const f = {rowup: () => addRow(false), rowdn: () => addRow(true), rowdel: delRow, colL: () => addCol(false), colR: () => addCol(true), coldel: delCol}[t.dataset.t]; if (f && tblCell) tableOp(f); return; }
     if ('bg' in t.dataset) { if (tblCell) tableOp(() => paint(t.dataset.bg, $('#scope2').value)); return; }
     const hasSel = s => s.rangeCount && !s.isCollapsed && ftbEl.contains(s.anchorNode);
     if (op === 'bold') ftbApply((el, s) => { if (hasSel(s)) document.execCommand('bold'); else el.style.fontWeight = +getComputedStyle(el).fontWeight >= 600 ? '400' : '700'; });
     else if (op === 'left' || op === 'center' || op === 'right') ftbApply(el => { el.style.textAlign = op; if (getComputedStyle(el).display === 'flex') el.style.justifyContent = op === 'center' ? 'center' : op === 'right' ? 'flex-end' : 'flex-start'; });
-    else if (op === 'up' || op === 'down') ftbApply(el => { const f = parseFloat(getComputedStyle(el).fontSize) || 12; el.style.fontSize = Math.max(8, Math.min(36, f + (op === 'up' ? 1 : -1))) + 'px'; });
+    else if (op === 'up' || op === 'down') { const fz = $('#fsz'); setSize((+fz.value || 12) + (op === 'up' ? 1 : -1), true); }
     else if ('c' in t.dataset) ftbApply((el, s) => { const c = t.dataset.c; if (hasSel(s)) document.execCommand('foreColor', false, c || '#333333'); else el.style.color = c; });
   });
+  const fz = $('#fsz');
+  if (fz) {
+    fz.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); setSize(+fz.value, false); ftbEl?.focus(); } else if (e.key === 'Escape') { ftbEl?.focus(); } });
+    fz.addEventListener('change', () => setSize(+fz.value, false));
+  }
   desk.addEventListener('focusin', e => { const ed = e.target.closest('[data-ed]'); if (ed) showFTB(ed); });
-  desk.addEventListener('focusout', () => setTimeout(() => { const a = document.activeElement; if (!(a && a.closest && a.closest('#desk [data-ed]')) && !b.matches(':hover')) hideFTB(); }, 120));
+  desk.addEventListener('focusout', () => setTimeout(() => { const a = document.activeElement; if (!(a && a.closest && (a.closest('#desk [data-ed]') || a.closest('#ftb'))) && !b.matches(':hover')) hideFTB(); }, 120));
   window.addEventListener('scroll', () => { if (ftbEl) placeFTB(); }, {passive: true});
   window.addEventListener('resize', () => { if (ftbEl) placeFTB(); });
 }
@@ -1141,6 +1195,16 @@ async function createFromPhoto(){
     busy(false); location.hash = 'c-' + nid;
     toast('사진 내용으로 새 계약서를 만들었어요. 금액·이름·계좌를 원본과 꼭 대조해 주세요.');
   } catch (e) { busy(false); $('#exp').innerHTML = ''; toast(e?.code === 'rate_limited' ? '요청이 많아요. 잠시 뒤 다시 해 주세요.' : e?.code === 'not_granted' ? 'AI 사용이 허용되지 않았어요.' : '사진을 읽지 못했어요. 더 밝고 반듯한 사진으로 다시 해 주세요.'); console.error(e); }
+}
+
+function setSize(px, keepSel){
+  px = Math.max(8, Math.min(48, Math.round(+px || 12))); const fz = $('#fsz'); if (fz) fz.value = px;
+  ftbApply((el, s) => {
+    if (keepSel && s.rangeCount && !s.isCollapsed && el.contains(s.anchorNode)) {
+      document.execCommand('fontSize', false, '7');
+      el.querySelectorAll('font[size="7"]').forEach(f => { const sp = document.createElement('span'); sp.style.fontSize = px + 'px'; while (f.firstChild) sp.appendChild(f.firstChild); f.replaceWith(sp); });
+    } else el.style.fontSize = px + 'px';
+  });
 }
 
 /* ---------- export ---------- */
