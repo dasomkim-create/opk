@@ -164,6 +164,13 @@ body.navmin .main{margin-left:64px}
 #ct .ftb .ic{width:32px;padding:0;display:grid;place-items:center}
 #ct .ftb .ic svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
 #ct .ftb .tg[hidden]{display:none}
+#ct #ftb{padding:6px 8px}
+#ct #ftb .fr{gap:4px;padding:3px 2px}
+#ct #ftb .fr+.fr{margin-top:4px;padding-top:7px}
+#ct #ftb .sep{margin:0 6px}
+#ct #ftb .lab{margin:0 4px 0 2px}
+#ct #ftb .ic.wide{width:auto;min-width:32px;padding:0 8px;gap:4px;display:inline-flex}
+#ct #ftb [data-t=merge],#ct #ftb [data-t=split]{padding:0 10px}
 #ct .ftb select{height:30px;border-radius:7px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);font:600 12px \"Pretendard\",sans-serif;padding:0 4px}
 #ct section.art>h2{cursor:pointer}
 .pg[data-lang=zh]{font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC","Noto Sans CJK SC","Source Han Sans SC",sans-serif}

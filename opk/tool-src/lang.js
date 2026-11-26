@@ -104,13 +104,15 @@ function placeFTB(){
 function showFTB(el){ const b = $('#ftb'); if (!b || !canWrite || !editOn) return; ftbEl = el; const fz = $('#fsz'); if (fz && document.activeElement !== fz) fz.value = Math.round(parseFloat(getComputedStyle(el).fontSize) || 12); b.querySelectorAll('.tbl').forEach(g => g.hidden = !el.closest('table.t')); b.hidden = false; placeFTB(); }
 function ftbApply(fn){ const el = ftbEl && ftbEl.isConnected ? ftbEl : null; if (!el) return; flushPend(); fn(el, getSelection()); pushHist(); markDirty(); refreshThumbs(); placeFTB(); }
 /* ---------- 날짜 고르기: 계약일·공사기간·서명란 날짜를 달력에서 ---------- */
-const DATE_RES = [[/(20\d{2}|20)\s*년\s*(\d{1,2})?\s*월\s*(\d{1,2})?\s*일/g, 'ko'], [/(20\d{2})\s*([.\-\/])\s*(\d{1,2})\s*[.\-\/]\s*(\d{1,2})(\s*\.)?/g, 'dot']];
+const DATE_RES = [[/(20\d{2}|20)\s*년\s*(\d{1,2})?\s*월\s*(\d{1,2})?\s*일/g, 'ko'], [/(20\d{2})\s*([.\-\/])\s*(\d{1,2})\s*[.\-\/]\s*(\d{1,2})(\s*\.)?/g, 'dot'], [/20[\s ]+\.[\s ]+\.[\s ]+\./g, 'dotph'], [/(?<!\d[\s ]*)년[\s ]+월[\s ]+일/g, 'kph']];
 let calCtx = null, calView = null, calKb = null;
 function datesIn(el){
   const out = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let n;
   while ((n = w.nextNode())) for (const [re, kind] of DATE_RES) {
     re.lastIndex = 0; let m;
     while ((m = re.exec(n.textContent))) {
+      if (kind === 'kph') { out.push({node: n, start: m.index, end: m.index + m[0].length, kind: 'ko', sep: '', dot: true, y: null, m: null, d: null}); continue; }
+      if (kind === 'dotph') { out.push({node: n, start: m.index, end: m.index + m[0].length, kind: 'dot', sep: '.', dot: true, y: null, m: null, d: null}); continue; }
       const ko = kind === 'ko';
       out.push({node: n, start: m.index, end: m.index + m[0].length, kind, sep: ko ? '' : m[2], dot: ko ? true : !!m[5],
         y: m[1].length === 4 ? +m[1] : null, m: +(ko ? m[2] : m[3]) || null, d: +(ko ? m[3] : m[4]) || null});
@@ -125,8 +127,8 @@ function dateHit(el){
 }
 const sameDay = (a, b) => a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 function closeCal(){ const c = $('#cal'); if (c) c.hidden = true; calCtx = null; }
-function openCal(el){
-  el = el || ftbEl; if (!el) return;
+function openCal(el, opts){
+  el = el || (opts ? null : ftbEl); if (!el && !opts) return;
   let c = $('#cal');
   if (!c) {
     c = document.createElement('div'); c.id = 'cal'; c.className = 'cal'; c.setAttribute('role', 'dialog'); c.setAttribute('aria-label', '날짜 고르기');
@@ -140,7 +142,13 @@ function openCal(el){
       else if ('today' in t.dataset) putDate(new Date());
     });
   }
-  const s = getSelection(), hit = dateHit(el);
+  if (opts && opts.cb) {
+    calCtx = {cb: opts.cb, sel: opts.sel || null, kind: 'dot'}; const base = calCtx.sel || new Date(); calKb = new Date(base); calView = new Date(base.getFullYear(), base.getMonth(), 1);
+    renderCal(); c.hidden = false; const ar = opts.anchor.getBoundingClientRect();
+    let top = ar.bottom + 6; if (top + c.offsetHeight > innerHeight - 8) top = Math.max(8, ar.top - c.offsetHeight - 6);
+    c.style.top = top + 'px'; c.style.left = Math.max(8, Math.min(ar.left, innerWidth - c.offsetWidth - 8)) + 'px'; return;
+  }
+  const s = getSelection(), hit = (opts && opts.hit) || dateHit(el);
   const range = s.rangeCount && el.contains(s.getRangeAt(0).startContainer) ? s.getRangeAt(0).cloneRange() : null;
   const sel = hit && hit.y && hit.m && hit.d ? new Date(hit.y, hit.m - 1, hit.d) : null;
   calCtx = {el, hit, range, sel, kind: hit ? hit.kind : (/년/.test(el.textContent) ? 'ko' : 'dot')};
@@ -163,17 +171,19 @@ function renderCal(){
   }
   c.innerHTML = `<div class="cal-h"><button type="button" data-cv="-1" aria-label="이전 달">${chev('M12.5 5 7.5 10l5 5')}</button><b>${y}년 ${mo + 1}월</b><button type="button" data-cv="1" aria-label="다음 달">${chev('M7.5 5l5 5-5 5')}</button></div>`
     + `<div class="cal-w">${['일', '월', '화', '수', '목', '금', '토'].map(w => `<span>${w}</span>`).join('')}</div><div class="cal-g">${days}</div>`
-    + `<div class="cal-f"><div class="cal-seg" role="group" aria-label="날짜 모양"><button type="button" data-fmt="dot" class="${f === 'dot' ? 'on' : ''}">${ex.getFullYear()}. ${ex.getMonth() + 1}. ${ex.getDate()}.</button><button type="button" data-fmt="ko" class="${f === 'ko' ? 'on' : ''}">${ex.getFullYear()}년 ${ex.getMonth() + 1}월 ${ex.getDate()}일</button></div><button type="button" class="cal-today" data-today>오늘</button></div>`;
+    + `<div class="cal-f">${calCtx.cb ? '<span></span>' : ''}<div class="cal-seg"${calCtx.cb ? ' hidden' : ''} role="group" aria-label="날짜 모양"><button type="button" data-fmt="dot" class="${f === 'dot' ? 'on' : ''}">${ex.getFullYear()}. ${ex.getMonth() + 1}. ${ex.getDate()}.</button><button type="button" data-fmt="ko" class="${f === 'ko' ? 'on' : ''}">${ex.getFullYear()}년 ${ex.getMonth() + 1}월 ${ex.getDate()}일</button></div><button type="button" class="cal-today" data-today>오늘</button></div>`;
 }
 function putDate(dt){
+  if (calCtx.cb) { const cb = calCtx.cb; closeCal(); cb(dt); return; }
   const {el, hit, range, kind} = calCtx; if (!el.isConnected) { closeCal(); return; }
   const y = dt.getFullYear(), m = dt.getMonth() + 1, d = dt.getDate();
   const keepDot = hit && hit.kind === 'dot' && kind === 'dot', sep = keepDot && hit.sep !== '.' ? hit.sep : null;
   const str = kind === 'ko' ? `${y}년 ${m}월 ${d}일` : sep ? `${y}${sep}${String(m).padStart(2, '0')}${sep}${String(d).padStart(2, '0')}` : `${y}. ${m}. ${d}${keepDot && !hit.dot ? '' : '.'}`;
-  flushPend();
+  flushPend(); const linkKey = hit && typeof dateKeyAt === 'function' ? dateKeyAt(el, hit) : null;
   if (hit && hit.node.isConnected) { const t = hit.node.textContent; hit.node.textContent = t.slice(0, hit.start) + str + t.slice(hit.end); caretTo(el, true); }
   else { el.focus(); const s = getSelection(); if (range) { s.removeAllRanges(); s.addRange(range); } else caretTo(el, true); document.execCommand('insertText', false, str); }
-  pushHist(); markDirty(); refreshThumbs(); closeCal(); toast(`날짜를 ${str} 로 넣었어요.`);
+  let more = 0; if (linkKey) { more = setKey(linkKey, dt, el) - 1; refreshFP(); }
+  pushHist(); markDirty(); refreshThumbs(); closeCal(); toast(more > 0 ? `${linkKey} ${str} — 같은 날짜 ${more}곳도 함께 바꿨어요.` : `날짜를 ${str} 로 넣었어요.`);
 }
 function wireCal(desk){
   if (window.__calWired) return; window.__calWired = true;
@@ -188,8 +198,16 @@ function wireCal(desk){
     else { closeCal(); return; }
     e.preventDefault(); e.stopPropagation(); calView = new Date(calKb.getFullYear(), calKb.getMonth(), 1); renderCal();
   }, true);
-  // 날짜 글자를 두 번 누르면 바로 달력
-  desk.addEventListener('dblclick', e => { if (!editOn || !canWrite) return; const ed = e.target.closest('[data-ed]'); if (ed && datesIn(ed).length) setTimeout(() => { if (dateHit(ed)) openCal(ed); }, 0); });
+  // 날짜 글자를 한 번 누르면 바로 달력 (고르면 끝)
+  desk.addEventListener('click', e => {
+    if (!editOn || !canWrite || e.shiftKey || e.altKey) return; const ed = e.target.closest('[data-ed]'); if (!ed) return; const all = datesIn(ed); if (!all.length) return;
+    setTimeout(() => {
+      const s = getSelection(); if (!s.rangeCount || !s.isCollapsed) return; const r = s.getRangeAt(0);
+      let h = all.find(x => x.node.isConnected && r.startContainer === x.node && r.startOffset >= x.start && r.startOffset <= x.end);
+      if (!h && all.length === 1 && ed.textContent.trim().length <= all[0].end - all[0].start + 6) h = all[0];
+      if (h) openCal(ed, {hit: h});
+    }, 0);
+  });
 }
 function wireFTB(){
   const b = $('#ftb'), desk = $('#desk'); if (!b || !desk) return;
@@ -230,6 +248,13 @@ const PHOTO_PROMPT = `첨부한 계약서 사진(여러 장이면 순서대로 �
 - 조항(제1조, 제2조…) 순서를 지켜. "계약당사자" 조항은 articles 에 넣지 말고 owner/contractor 에 넣어.
 - 조항 안의 번호 목록은 list 로, "항목: 내용" 짝은 kv 로, 표는 table 로, 총 금액은 amount 로, 강조된 안내 문단은 note 로.
 - list 항목은 원래 번호(1., ①, • 등)를 앞에 그대로 붙여.
+- "제N조" 없이 맨 바깥 번호(1. 2. 3. …)로 나뉜 양식(예: 표준도급계약서 표지)이면, 그 번호 하나하나를 articles 의 조항 하나로 만들어. 여러 번호를 한 조항으로 묶지 마. 번호가 13개면 articles 도 13개.
+  · title 은 번호 뒤 항목 이름만, 글자 사이 띄어쓰기는 붙여서 (예: "1. 공 사 명 :" → "공사명", "3. 착공년월일" → "착공년월일").
+  · 콜론 뒤 값과 그 번호 아래 딸린 줄(괄호 줄 "(노무비) …", 각주 "1) …", ①·가. 하위 항목)은 그 조항의 blocks 로 (text, list).
+  · 번호 안의 표는 그 조항의 table 로.
+- 비어 있는 칸은 비운 모양 그대로 옮겨 (예: "년 월 일", "일금 원정", "( )월에 1회", "( )%"). 0 이나 예시 값을 채우지 마.
+- 당사자가 "도급인/수급인"처럼 다른 이름이면 role 에 그 이름 그대로. 아래 서명란에만 있는 주소·성명도 owner/contractor rows 에 (["주소",""],["성명",""]).
+- 맨 끝 맺음 문단(“도급인”과 “수급인”은 … 보관한다)과 붙임서류 목록은 articles 가 아니라 outro 에 줄마다 넣어.
 {
  "title": "계약서 제목 (예: 타일 공사 계약서)",
  "kicker": "영문 소제목 (없으면 CONSTRUCTION CONTRACT)",
@@ -244,7 +269,8 @@ const PHOTO_PROMPT = `첨부한 계약서 사진(여러 장이면 순서대로 �
     {"type":"table","head":["구분","…"],"rows":[["…","…"]]},
     {"type":"amount","label":"총 공사금액","value":"금 0원","note":"(일금 … · 부가세 포함)"},
     {"type":"note","text":"…"} ]} ],
- "signDate": "서명란 날짜 (예: 2026년 11월 26일)"
+ "outro": ["맺음 문단", "붙임서류 : 1. …", "2. …"],
+ "signDate": "서명란 날짜 (예: 2026년 11월 26일, 비어 있으면 \"년 월 일\")"
 }`;
 function pickImages(){
   return new Promise(res => {
@@ -295,7 +321,9 @@ function buildContract(d){
   if (d.intro) pieces.push(`<p style="padding: 12px 0 10px">${T(d.intro)}</p>`);
   let no = 1;
   pieces.push(secHTML(no++, '계약당사자', partiesHTML(d.owner, d.contractor)));
-  (d.articles || []).forEach(a => { const bs = (a.blocks || []).map(blockHTML).filter(Boolean); const body = bs.length > 1 ? `<div style="display: flex; flex-direction: column; gap: 6px">${bs.join('')}</div>` : (bs[0] || '<p></p>'); pieces.push(secHTML(no++, a.title || '', body)); });
+  (d.articles || []).forEach(a => { const bs = (a.blocks || []).map(blockHTML).filter(Boolean); const body = bs.length > 1 ? `<div style="display: flex; flex-direction: column; gap: 6px">${bs.join('')}</div>` : (bs[0] || '<p></p>'); pieces.push(secHTML(no++, String(a.title || '').replace(/^\s*\d+\s*[.)]\s*/, '').replace(/\s*:\s*$/, ''), body)); });
+  const outro = (Array.isArray(d.outro) ? d.outro : d.outro ? [d.outro] : []).map(x => String(x || '').trim()).filter(Boolean);
+  if (outro.length) pieces.push(`<div style="display: flex; flex-direction: column; gap: 4px; padding: 12px 0 4px">${outro.map((x, i) => `<p${i === 0 ? '' : ' style="padding-left: 12px"'}>${T(x)}</p>`).join('')}</div>`);
   const foot = (i, n) => `<p style="margin-top: ${i < n ? 'auto' : '20px'}; padding-top: 12px; border-top: 1px solid #e1e1e1; display: flex; justify-content: space-between; color: #555555"><span>${T(d.title || '계약서')}</span><span>${i} / ${n}</span></p>`;
   // lay out into A4 pages by measuring
   const box = $('#exp'); box.innerHTML = '';

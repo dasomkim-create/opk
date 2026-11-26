@@ -190,7 +190,7 @@ function markEditable(root){
     const emptyCell = (el.tagName === 'TD' || el.tagName === 'TH') && !el.textContent.trim() && !el.querySelector(BLOCK);
     if ((direct || emptyCell) && !hasBlock) { el.setAttribute('contenteditable', 'true'); el.setAttribute('data-ed', ''); el.spellcheck = false; }
   });
-  root.querySelectorAll('.fld').forEach(f => f.setAttribute('contenteditable', 'false'));
+  root.querySelectorAll('.fld').forEach(f => { f.setAttribute('contenteditable', 'false'); f.removeAttribute('style'); });
 }
 function cleanHTML(pg){
   const c = pg.cloneNode(true);
@@ -433,93 +433,205 @@ function joinPrev(p){
 }
 
 
-/* 기본정보 입력칸: 계약서 곳곳의 밑줄 칸(.fld, data-k=항목 이름)을 한 곳에서 채우면 같은 항목이 모두 바뀜 */
-const FLD_PRESETS = ['발주자', '시공사', '시공사 대표자', '공사명', '현장주소', '계약일', '공사기간', '총 공사금액'];
-const FLD_STYLE = 'display: inline-block; min-width: 72px; padding: 0 3px; border-bottom: 1px solid #333333; text-align: center; line-height: 1.35';
-let fldRange = null, fldTimer = null; const fpVals = {};
-const fldAll = k => [...document.querySelectorAll('#desk .fld')].filter(f => k == null || f.dataset.k === k);
-function fldKeys(){ const ks = [...FLD_PRESETS]; fldAll().forEach(f => { if (f.dataset.k && !ks.includes(f.dataset.k)) ks.push(f.dataset.k); }); return ks; }
-function fldMake(k, v){ const s = document.createElement('span'); s.className = 'fld'; s.dataset.k = k; s.setAttribute('style', FLD_STYLE); s.setAttribute('contenteditable', 'false'); s.title = k; s.textContent = v || ''; return s; }
-function fldSet(k, v){
-  fldAll(k).forEach(f => { if (f.textContent !== v) f.textContent = v; });
-  markDirty(); refreshThumbs(); clearTimeout(fldTimer); fldTimer = setTimeout(pushHist, 600);
+/* 기본정보: 계약서 안의 정해진 자리(계약일·당사자·공사명·공사기간·금액)를 자동으로 찾아 한 곳에서 채움.
+   자리를 따로 넣을 필요 없이, 같은 항목은 계약서 어디에 있든 함께 바뀜 (머리 계약일 ↔ 서명란 날짜 등) */
+const txtOf = el => el.textContent.replace(/\s+/g, ' ').trim();
+const PARTY_LABELS = ['회사명', '업체명', '상호', '대표자', '연락처', '현장주소', '사업자주소', '주소', '계좌정보'];
+const FP_GROUPS = [
+  ['계약', ['계약일', '공사명', '공사장소', '착공일', '준공일', '총 공사금액']],
+  ['발주자 (갑)', ['발주자', '발주자 대표자', '발주자 연락처', '발주자 현장주소', '발주자 사업자주소', '발주자 주소', '발주자 계좌정보']],
+  ['시공사 (을)', ['시공사', '시공사 대표자', '시공사 연락처', '시공사 현장주소', '시공사 사업자주소', '시공사 주소', '시공사 계좌정보']]
+];
+const fpLabel = k => k === '발주자' || k === '시공사' ? '회사명' : k.replace(/^(발주자|시공사) /, '');
+const fmtD = (dt, kind, sep, dot) => kind === 'ko' ? `${dt.getFullYear()}년 ${dt.getMonth() + 1}월 ${dt.getDate()}일`
+  : sep && sep !== '.' ? `${dt.getFullYear()}${sep}${String(dt.getMonth() + 1).padStart(2, '0')}${sep}${String(dt.getDate()).padStart(2, '0')}`
+  : `${dt.getFullYear()}. ${dt.getMonth() + 1}. ${dt.getDate()}${dot === false ? '' : '.'}`;
+function korNum(n){
+  n = Math.floor(Math.abs(n)); if (!n) return '영';
+  const D = ['', '일', '이', '삼', '사', '오', '육', '칠', '팔', '구'], S = ['', '십', '백', '천'], B = ['', '만', '억', '조'];
+  let out = '', g = 0;
+  while (n > 0) {
+    const part = n % 10000; n = Math.floor(n / 10000);
+    if (part) { let s = ''; String(part).padStart(4, '0').split('').forEach((c, i) => { const d = +c, u = 3 - i; if (d) s += (d === 1 && u > 0 ? '' : D[d]) + S[u]; }); out = s + B[g] + out; }
+    g++;
+  }
+  return out;
 }
-function fldInsert(k, v){
-  const r = fldRange; const host = r && r.startContainer && (r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement)?.closest('[data-ed]');
-  if (!host || !host.isConnected) { toast('먼저 계약서에서 칸을 넣을 자리를 눌러 주세요.'); return; }
-  flushPend(); const s = fldMake(k, v);
-  r.deleteContents(); r.insertNode(s);
-  const after = document.createTextNode(' '); s.after(after);
-  const nr = document.createRange(); nr.setStartAfter(after); nr.collapse(true); fldRange = nr;
-  pushHist(); markDirty(); refreshThumbs(); renderFP(); toast(`‘${k}’ 칸을 넣었어요. 기본정보에서 채우면 같은 칸이 모두 바뀌어요.`);
+function textSlot(key, el){ return {key, el, type: 'text', get: () => txtOf(el), set: v => { el.textContent = v; }}; }
+function dateSlot(key, el, nth){
+  return {key, el, nth, type: 'date',
+    get: () => { const h = datesIn(el)[nth]; return h && h.y && h.m && h.d ? new Date(h.y, h.m - 1, h.d) : null; },
+    set: dt => { const h = datesIn(el)[nth]; if (!h || !(dt instanceof Date)) return; const t = h.node.textContent; h.node.textContent = t.slice(0, h.start) + fmtD(dt, h.kind, h.sep, h.dot) + t.slice(h.end); }};
 }
-/* 이미 적힌 글자(예: ○○건설)를 같은 항목 칸으로 한꺼번에 바꾸기 */
-function fldLink(k, text){
-  text = text.trim(); if (!text) { toast('먼저 값을 적어 주세요. 계약서에 같은 글자가 있으면 모두 칸으로 바꿔요.'); return; }
-  flushPend(); let n = 0;
+function introSlot(p, role){
+  const re = new RegExp(`(^\\s*|\\)\\s*[와과]?\\s*|,\\s*)([^()“”"]+?)(\\s*\\(이하\\s*[“"]${role})`);
+  const node = () => { const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) if (re.test(n.textContent)) return n; return null; };
+  if (!node()) return null;
+  return {key: role, el: p, type: 'text', get: () => { const n = node(); return n ? n.textContent.match(re)[2].trim() : ''; },
+    set: v => { const n = node(); if (n) n.textContent = n.textContent.replace(re, (_, a, b, c) => a + (v.trim() || '○○○') + c); }};
+}
+function moneySlot(el, sec){
+  return {key: '총 공사금액', el, type: 'money',
+    get: () => { const m = el.textContent.match(/([\d,]+)\s*원/); return m ? m[1] : ''; },
+    set: v => {
+      const n = +String(v).replace(/[^\d]/g, '') || 0;
+      el.textContent = el.textContent.replace(/[\d,]+(\s*원)/, n.toLocaleString('ko-KR') + '$1');
+      const w = document.createTreeWalker(sec, NodeFilter.SHOW_TEXT); let x; while ((x = w.nextNode())) if (/일금\s*[^원()]*?\s*원정/.test(x.textContent)) x.textContent = x.textContent.replace(/일금\s*[^원()]*?\s*원정/, `일금 ${korNum(n)} 원정`);
+      // 지급 비율 표의 금액도 함께 계산
+      document.querySelectorAll('#desk table.t').forEach(t => {
+        const head = [...(t.rows[0]?.cells || [])].map(c => txtOf(c)); const pi = head.findIndex(h => /비율/.test(h)), ai = head.findIndex(h => /금액/.test(h));
+        if (pi < 0 || ai < 0) return;
+        [...t.rows].slice(1).forEach(r => { const pc = r.cells[pi], ac = r.cells[ai]; const m = pc && pc.textContent.match(/(\d+(?:\.\d+)?)\s*%/); if (m && ac) ac.textContent = Math.round(n * +m[1] / 100).toLocaleString('ko-KR') + '원'; });
+      });
+    }};
+}
+function findSlots(){
+  const S = [], push = s => { if (s) S.push(s); };
   document.querySelectorAll('#desk .pg').forEach(pg => {
-    const w = document.createTreeWalker(pg, NodeFilter.SHOW_TEXT, {acceptNode: x => x.parentElement.closest('.fld') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
-    const nodes = []; let x; while ((x = w.nextNode())) if (x.textContent.includes(text)) nodes.push(x);
-    nodes.forEach(node => {
-      const parts = node.textContent.split(text), frag = document.createDocumentFragment();
-      parts.forEach((p, i) => { if (p) frag.appendChild(document.createTextNode(p)); if (i < parts.length - 1) { frag.appendChild(fldMake(k, text)); n++; } });
-      node.replaceWith(frag);
+    pg.querySelectorAll('header p').forEach(p => { if (/계약일/.test(p.textContent) && datesIn(p).length) push(dateSlot('계약일', p, 0)); });
+    [...pg.children].forEach(ch => { if (ch.tagName === 'DIV' && ch.querySelectorAll('table').length >= 2) { const p = ch.querySelector(':scope > p'); if (p && datesIn(p).length) push(dateSlot('계약일', p, 0)); } });
+    pg.querySelectorAll('table.t').forEach(t => {
+      const g = grid(t); let role = null;
+      [...t.rows].forEach((tr, ri) => {
+        const rc = (g[ri] || []).find(c => c.tagName === 'TH' && /^(발주자|시공사|도급인|수급인)/.test(txtOf(c)));
+        if (rc) role = /^(발주자|도급인)/.test(txtOf(rc)) ? '발주자' : '시공사';
+        if (!role) return;
+        const cells = [...tr.cells];
+        cells.forEach((c, i) => {
+          if (c.tagName !== 'TH' || !PARTY_LABELS.includes(txtOf(c))) return;
+          const v = cells[i + 1]; if (!v || v.tagName !== 'TD' || /\(인\)/.test(v.textContent)) return;
+          push(textSlot(['회사명', '업체명', '상호'].includes(txtOf(c)) ? role : `${role} ${txtOf(c)}`, v));
+        });
+      });
+    });
+    pg.querySelectorAll('p').forEach(p => { if (!p.closest('table') && /\(이하\s*[“"](발주자|시공사)/.test(p.textContent)) ['발주자', '시공사'].forEach(r => push(introSlot(p, r))); });
+    pg.querySelectorAll('.kv').forEach(kv => { const s = kv.querySelector(':scope > strong'); const p = kv.querySelector(':scope > p'); if (s && p && /공사명/.test(s.textContent)) push(textSlot('공사명', p)); });
+    pg.querySelectorAll('section.art').forEach(sec => {
+      const h = sec.querySelector('h2 .tt') || sec.querySelector('h2'); if (!h) return; const t = txtOf(h);
+      const firstP = () => sec.querySelector(':scope > p, :scope > div > p');
+      if (/^공사명$/.test(t.replace(/\s/g, '')) && firstP()) push(textSlot('공사명', firstP()));
+      if (/^(공사장소|공사현장|현장주소|공사위치)$/.test(t.replace(/\s/g, '')) && firstP()) push(textSlot('공사장소', firstP()));
+      if (/착공/.test(t) && !/공사기간/.test(t)) { const p = [...sec.querySelectorAll('p')].find(x => datesIn(x).length); if (p) push(dateSlot('착공일', p, 0)); }
+      if (/준공/.test(t) && !/공사기간/.test(t)) { const p = [...sec.querySelectorAll('p')].find(x => datesIn(x).length); if (p) push(dateSlot('준공일', p, 0)); }
+      if (/공사기간/.test(t)) { const p = [...sec.querySelectorAll('p')].find(x => datesIn(x).length); if (p) { push(dateSlot('착공일', p, 0)); if (datesIn(p).length > 1) push(dateSlot('준공일', p, 1)); } }
+      if (/공사금액|계약금액/.test(t)) { const el = [...sec.querySelectorAll('span,p,strong,td')].find(x => !x.children.length && /금\s*[\d,]+\s*원/.test(x.textContent)); if (el) push(moneySlot(el, sec)); }
     });
   });
-  if (!n) { toast(`계약서에 ‘${text}’ 글자가 없어요.`); return; }
-  pushHist(); markDirty(); refreshThumbs(); renderFP(); toast(`‘${text}’ ${n}곳을 ‘${k}’ 칸으로 바꿨어요.`);
+  // 예전에 넣은 칸(.fld)도 같은 항목으로
+  document.querySelectorAll('#desk .fld').forEach(f => push(textSlot(f.dataset.k, f)));
+  return S;
 }
-function renderFP(focusKey){
+function setKey(key, v, skipEl){
+  flushPend();
+  const ss = findSlots().filter(s => s.key === key);
+  ss.forEach(s => { if (s.el === skipEl) return; if (s.type === 'text' && v instanceof Date) s.set(fmtD(v, 'dot')); else s.set(v); });
+  // 공사기간 '총 N일' 다시 계산
+  if (key === '착공일' || key === '준공일') {
+    const a = findSlots().find(s => s.key === '착공일'), b = findSlots().find(s => s.key === '준공일');
+    const da = a && a.get(), db = b && b.get();
+    if (da && db && a.el === b.el) { const n = Math.round((db - da) / 864e5) + 1; const w = document.createTreeWalker(a.el.parentElement || a.el, NodeFilter.SHOW_TEXT); let x; while ((x = w.nextNode())) if (/총\s*\d+\s*일/.test(x.textContent) && n > 0) x.textContent = x.textContent.replace(/총\s*\d+\s*일/, `총 ${n}일`); }
+  }
+  markDirty(); refreshThumbs(); clearTimeout(fpTimer); fpTimer = setTimeout(pushHist, 500);
+  return ss.length;
+}
+/* 달력에서 고른 날짜가 계약일 같은 항목이면, 같은 항목 다른 자리도 함께 */
+function dateKeyAt(el, hit){
+  const s = findSlots().find(s => s.type === 'date' && (s.el === el || s.el.contains(el) || el.contains(s.el)) && (() => { const h = datesIn(s.el)[s.nth]; return h && h.node === hit.node && h.start === hit.start; })());
+  return s ? s.key : null;
+}
+
+/* ---- 패널: 쪽 목록 옆에 붙어 있고, 접기·펴기, 머리를 끌어서 떼어 옮기기 ---- */
+let fpTimer = null, fpSig = '', fpObs = null;
+const fpPref = (k, d) => { try { const v = localStorage.getItem('opk-fp-' + k); return v === null ? d : v; } catch { return d; } };
+const fpSave = (k, v) => { try { localStorage.setItem('opk-fp-' + k, v); } catch {} };
+const escA = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+function fpRow(key, s){
+  const lab = escA(fpLabel(key)), cnt = `<small>${s.length > 1 ? s.length + '곳' : ''}</small>`;
+  if (s[0].type === 'date') { const d = s[0].get(); return `<div class="fp-row" data-k="${escA(key)}"><label><span>${lab}</span>${cnt}</label><button type="button" class="fp-in fp-date" data-k="${escA(key)}">${d ? fmtD(d, 'dot') : '<em>날짜 고르기</em>'}<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4"/></svg></button></div>`; }
+  const v = s[0].get(), money = s[0].type === 'money';
+  return `<div class="fp-row" data-k="${escA(key)}"><label><span>${lab}</span>${cnt}</label><input class="fp-in" data-k="${escA(key)}"${money ? ' inputmode="numeric"' : ''} value="${escA(v)}" aria-label="${lab}">${money ? '<i class="fp-unit">원</i>' : ''}</div>`;
+}
+function renderFP(){
   const p = $('#fp'); if (!p || p.hidden) return;
-  const esc2 = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
-  p.querySelector('.fp-list').innerHTML = fldKeys().map(k => {
-    const fs = fldAll(k), v = fs[0] ? fs[0].textContent : (fpVals[k] || '');
-    return `<div class="fp-row" data-k="${esc2(k)}"><label><span>${esc2(k)}</span><small>${fs.length ? fs.length + '곳' : '아직 없음'}</small></label>
-      <input class="fp-in" value="${esc2(v)}" placeholder="입력하면 계약서에 바로 들어가요" aria-label="${esc2(k)}">
-      <div class="fp-act"><button type="button" data-fa="ins" title="누른 자리에 이 칸 넣기">자리에 넣기</button><button type="button" data-fa="link" title="계약서에 같은 글자가 있으면 모두 이 칸으로">같은 글자 연결</button>${fs.length ? '<button type="button" data-fa="show" title="계약서에서 이 칸 보기">찾기</button>' : ''}</div></div>`;
-  }).join('');
-  if (focusKey) { const i = [...p.querySelectorAll('.fp-row')].find(r => r.dataset.k === focusKey)?.querySelector('input'); if (i) { i.focus(); i.select(); } }
+  const slots = findSlots(), by = new Map(); slots.forEach(s => { if (!by.has(s.key)) by.set(s.key, []); by.get(s.key).push(s); });
+  const known = new Set(FP_GROUPS.flatMap(g => g[1])), extra = [...by.keys()].filter(k => !known.has(k));
+  const groups = [...FP_GROUPS, ['기타', extra]].map(([g, ks]) => [g, ks.filter(k => by.has(k))]).filter(([, ks]) => ks.length);
+  fpSig = [...by.keys()].join('|');
+  p.querySelector('.fp-list').innerHTML = groups.length
+    ? groups.map(([g, ks]) => `<div class="fp-g"><h3>${escA(g)}</h3>${ks.map(k => fpRow(k, by.get(k))).join('')}</div>`).join('')
+    : '<p class="fp-empty">이 계약서에서 계약일·당사자·공사명 같은 자리를 찾지 못했어요.</p>';
 }
-function openFP(focusKey){
+function refreshFP(){
+  const p = $('#fp'); if (!p || p.hidden || p.classList.contains('min')) return;
+  const slots = findSlots(); const sig = [...new Set(slots.map(s => s.key))].join('|');
+  if (sig !== fpSig) { const a = document.activeElement; if (a && a.closest && a.closest('#fp .fp-in')) return; renderFP(); return; }
+  p.querySelectorAll('.fp-row').forEach(r => {
+    const k = r.dataset.k, s = slots.find(x => x.key === k); if (!s) return; const i = r.querySelector('.fp-in');
+    if (s.type === 'date') { const d = s.get(); const t = d ? fmtD(d, 'dot') : ''; if (i.firstChild && i.firstChild.textContent !== (t || '날짜 고르기')) { i.firstChild.replaceWith(d ? document.createTextNode(t) : Object.assign(document.createElement('em'), {textContent: '날짜 고르기'})); } }
+    else if (i !== document.activeElement && i.value !== s.get()) i.value = s.get();
+  });
+}
+function fpPlace(){
+  const p = $('#fp'), ed = p && p.closest('.ed'); if (!p || !ed) return;
+  const float = p.classList.contains('float'), on = !p.hidden;
+  ed.classList.toggle('fp-on', on && !float); ed.classList.toggle('fp-min', on && !float && p.classList.contains('min'));
+  if (float) { const x = +fpPref('x', 200), y = +fpPref('y', 140); p.style.left = Math.max(8, Math.min(x, innerWidth - p.offsetWidth - 8)) + 'px'; p.style.top = Math.max(8, Math.min(y, innerHeight - 60)) + 'px'; }
+  else { p.style.left = ''; p.style.top = ''; }
+}
+function openFP(){
   if (!canWrite || !editOn) { toast('편집을 켜면 기본정보를 채울 수 있어요.'); return; }
-  let p = $('#fp');
-  if (!p) {
-    p = document.createElement('aside'); p.id = 'fp'; p.className = 'fp'; p.setAttribute('aria-label', '기본정보');
-    p.innerHTML = `<div class="fp-h"><b>기본정보</b><button type="button" class="fp-x" aria-label="닫기"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg></button></div>
-      <p class="fp-help">여기 적으면 계약서의 같은 항목 칸이 모두 함께 바뀌어요. 계약서에서 넣을 자리를 누르고 ‘자리에 넣기’, 이미 적힌 글자는 ‘같은 글자 연결’.</p>
-      <div class="fp-list"></div>
-      <form class="fp-add"><input placeholder="새 항목 이름 (예: 계좌번호)" aria-label="새 항목 이름" maxlength="30"><button type="submit">추가</button></form>`;
-    ($('#ftb')?.parentElement || document.body).appendChild(p);
-    p.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
-    p.querySelector('.fp-x').onclick = closeFP;
-    p.addEventListener('input', e => { const i = e.target.closest('.fp-in'); if (!i) return; const k = i.closest('.fp-row').dataset.k; fpVals[k] = i.value; fldSet(k, i.value); const sm = i.closest('.fp-row').querySelector('small'); if (sm) sm.textContent = fldAll(k).length ? fldAll(k).length + '곳' : '아직 없음'; });
-    p.addEventListener('click', e => {
-      const b = e.target.closest('[data-fa]'); if (!b) return; const row = b.closest('.fp-row'), k = row.dataset.k, v = row.querySelector('.fp-in').value;
-      if (b.dataset.fa === 'ins') fldInsert(k, v);
-      else if (b.dataset.fa === 'link') fldLink(k, v);
-      else if (b.dataset.fa === 'show') { const fs = fldAll(k); fs.forEach(f => f.classList.add('fld-hi')); fs[0]?.scrollIntoView({block: 'center', behavior: 'smooth'}); setTimeout(() => fs.forEach(f => f.classList.remove('fld-hi')), 1600); }
+  const p = $('#fp'); if (!p) return;
+  if (!p.dataset.wired) {
+    p.dataset.wired = '1';
+    p.innerHTML = `<div class="fp-h" title="끌어서 옮길 수 있어요"><svg class="fp-grip" viewBox="0 0 20 20" aria-hidden="true"><circle cx="7" cy="5" r="1.2"/><circle cx="13" cy="5" r="1.2"/><circle cx="7" cy="10" r="1.2"/><circle cx="13" cy="10" r="1.2"/><circle cx="7" cy="15" r="1.2"/><circle cx="13" cy="15" r="1.2"/></svg><b>기본정보</b>
+      <button type="button" class="fp-b fp-dock" title="쪽 목록 옆에 붙이기" aria-label="옆에 붙이기"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5"/><path d="M8 4v12"/></svg></button>
+      <button type="button" class="fp-b fp-min" title="접기 / 펴기" aria-label="접기"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M12.5 5 7.5 10l5 5"/></svg></button>
+      <button type="button" class="fp-b fp-x" title="닫기" aria-label="닫기"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg></button></div>
+      <p class="fp-help">여기 적으면 계약서의 같은 자리가 모두 함께 바뀌어요. 날짜는 눌러서 고르면 끝.</p>
+      <div class="fp-list"></div>`;
+    p.addEventListener('input', e => {
+      const i = e.target.closest('input.fp-in'); if (!i) return; const k = i.dataset.k;
+      if (i.inputMode === 'numeric') { const n = +i.value.replace(/[^\d]/g, ''); i.value = n ? n.toLocaleString('ko-KR') : ''; }
+      const n = setKey(k, i.value); const sm = i.closest('.fp-row').querySelector('small'); if (sm) sm.textContent = n > 1 ? n + '곳' : '';
     });
-    p.querySelector('.fp-add').addEventListener('submit', e => {
-      e.preventDefault(); const i = e.target.querySelector('input'), k = i.value.trim().replace(/\s+/g, ' '); if (!k) return;
-      if (!FLD_PRESETS.includes(k)) FLD_PRESETS.push(k); i.value = ''; renderFP(k);
+    p.addEventListener('click', e => {
+      const d = e.target.closest('.fp-date');
+      if (d) { const k = d.dataset.k, s = findSlots().find(x => x.key === k); openCal(null, {anchor: d, sel: s && s.get(), cb: dt => { setKey(k, dt); refreshFP(); toast(`${fpLabel(k)}: ${fmtD(dt, 'dot')} — 계약서 ${findSlots().filter(x => x.key === k).length}곳에 넣었어요.`); }}); return; }
+      if (e.target.closest('.fp-x')) { closeFP(); fpSave('open', '0'); return; }
+      if (e.target.closest('.fp-min')) { p.classList.toggle('min'); fpSave('min', p.classList.contains('min') ? '1' : '0'); fpPlace(); if (!p.classList.contains('min')) renderFP(); return; }
+      if (e.target.closest('.fp-dock')) { p.classList.remove('float'); fpSave('float', '0'); fpPlace(); return; }
+      if (p.classList.contains('min') && e.target.closest('.fp-h') && !p.classList.contains('float')) { p.classList.remove('min'); fpSave('min', '0'); fpPlace(); renderFP(); }
+    });
+    // 머리를 끌면 떼어서 원하는 곳으로
+    p.querySelector('.fp-h').addEventListener('pointerdown', e => {
+      if (e.button !== 0 || e.target.closest('button')) return;
+      const r = p.getBoundingClientRect(), ox = e.clientX - r.left, oy = e.clientY - r.top; let moved = false;
+      const mv = ev => {
+        if (!moved && Math.hypot(ev.clientX - e.clientX, ev.clientY - e.clientY) < 6) return;
+        if (!moved) { moved = true; p.classList.add('float'); p.classList.remove('min'); fpPlace(); }
+        const x = Math.max(8, Math.min(ev.clientX - ox, innerWidth - p.offsetWidth - 8)), y = Math.max(8, Math.min(ev.clientY - oy, innerHeight - 60));
+        p.style.left = x + 'px'; p.style.top = y + 'px';
+      };
+      const up = () => { removeEventListener('pointermove', mv); removeEventListener('pointerup', up); if (moved) { fpSave('float', '1'); fpSave('x', parseInt(p.style.left)); fpSave('y', parseInt(p.style.top)); renderFP(); } };
+      addEventListener('pointermove', mv); addEventListener('pointerup', up);
     });
   }
-  p.hidden = false; $('#fpb')?.setAttribute('aria-pressed', 'true'); renderFP(focusKey);
+  p.hidden = false; p.classList.toggle('float', fpPref('float', '0') === '1'); p.classList.toggle('min', fpPref('min', '0') === '1');
+  $('#fpb')?.setAttribute('aria-pressed', 'true'); fpSave('open', '1'); fpPlace(); renderFP();
+  if (!fpObs) { fpObs = new MutationObserver(() => { clearTimeout(fpObs.t); fpObs.t = setTimeout(refreshFP, 250); }); }
+  fpObs.disconnect(); const desk = $('#desk'); if (desk) fpObs.observe(desk, {childList: true, subtree: true, characterData: true});
 }
-function closeFP(){ const p = $('#fp'); if (p) p.hidden = true; $('#fpb')?.setAttribute('aria-pressed', 'false'); }
+function closeFP(){ const p = $('#fp'); if (p) p.hidden = true; $('#fpb')?.setAttribute('aria-pressed', 'false'); fpObs?.disconnect(); fpPlace(); const ed = $('.ed'); if (ed) ed.classList.remove('fp-on', 'fp-min'); }
 function wireFld(desk){
-  const rem = () => { const s = getSelection(); if (!s.rangeCount) return; const r = s.getRangeAt(0); const n = r.startContainer; const el = n.nodeType === 1 ? n : n.parentElement; if (el && el.closest('#desk [data-ed]') && !el.closest('.fld')) fldRange = r.cloneRange(); };
-  desk.addEventListener('keyup', rem); desk.addEventListener('mouseup', () => setTimeout(rem, 0));
-  desk.addEventListener('click', e => { const f = e.target.closest('.fld'); if (f && canWrite && editOn) { e.preventDefault(); openFP(f.dataset.k); } });
-  desk.addEventListener('keydown', e => {
-    // 칸 바로 뒤에서 Backspace → 칸 지우기
-    if (e.key !== 'Backspace') return; const s = getSelection(); if (!s.isCollapsed || !s.rangeCount) return;
-    const r = s.getRangeAt(0); let prev = null;
-    if (r.startContainer.nodeType === 3 && r.startOffset === 0) prev = r.startContainer.previousSibling;
-    else if (r.startContainer.nodeType === 1 && r.startOffset > 0) prev = r.startContainer.childNodes[r.startOffset - 1];
-    if (prev && prev.nodeType === 1 && prev.classList.contains('fld')) { e.preventDefault(); flushPend(); prev.remove(); pushHist(); markDirty(); refreshThumbs(); renderFP(); }
-  });
+  desk.addEventListener('click', e => { const f = e.target.closest('.fld'); if (f && canWrite && editOn) { if ($('#fp')?.hidden) openFP(); const i = $(`#fp .fp-in[data-k="${CSS.escape(f.dataset.k)}"]`); i?.focus(); } });
 }
+/* 쪽 목록(슬라이드처럼 보이는 왼쪽 썸네일) 접기·펴기 */
+function sideToggle(force){
+  const ed = $('.ed'); if (!ed) return; const off = force != null ? force : !ed.classList.contains('side-off');
+  ed.classList.toggle('side-off', off); try { localStorage.setItem('opk-side-off', off ? '1' : '0'); } catch {}
+  const b = $('#sideTg'); if (b) { b.setAttribute('aria-expanded', String(!off)); b.title = off ? '쪽 목록 펴기' : '쪽 목록 접기'; }
+}
+if (!window.__sideWired) { window.__sideWired = true; document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#sideTg')) sideToggle(); }); }
 
 
 /* 블록 선택: 여러 줄을 드래그해서 고르고 Delete / Backspace 로 한꺼번에 지우기 */
@@ -580,6 +692,7 @@ function setEdit(on){
   flushPend(); const pages = currentPages(); editOn = on; mountPages(pages);
   const tg = $('#editTgl'); if (tg) { tg.setAttribute('aria-pressed', on); tg.lastChild.textContent = on ? '편집' : '보기'; }
   const f = $('#fmt'); if (f) f.hidden = !on;
+  if (!on) closeFP(); else if (fpPref('open', '1') === '1') openFP();
   toast(on ? '편집을 켰어요. 글자를 눌러 고쳐요.' : '편집을 껐어요. 보기 모드예요.');
 }
 function renumArts(){
@@ -616,7 +729,7 @@ function showSTB(sec){
 }
 function mountPages(pages){
   const desk = $('#desk'), side = $('#side');
-  side.innerHTML = pages.map((p, i) => `<button class="tp" data-i="${i}" aria-label="${i+1}쪽으로"><span class="tbox" inert>${sanitizePage(p)}</span><span class="tn">${i+1}</span></button>`).join('') + (canWrite && editOn ? '<button class="btn addpg" id="addpg">+ 쪽 추가</button>' : '');
+  side.innerHTML = '<button type="button" class="side-tg" id="sideTg" aria-expanded="true" title="쪽 목록 접기" aria-label="쪽 목록 접기·펴기"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4" width="14" height="12" rx="1.5"/><path d="M8 4v12"/></svg></button>' + pages.map((p, i) => `<button class="tp" data-i="${i}" aria-label="${i+1}쪽으로"><span class="tbox" inert>${sanitizePage(p)}</span><span class="tn">${i+1}</span></button>`).join('') + (canWrite && editOn ? '<button class="btn addpg" id="addpg">+ 쪽 추가</button>' : '');
   desk.innerHTML = pages.map((p, i) => `<div class="sheet" id="pg${i+1}"><div class="lbl"><span>${i+1} / ${pages.length}쪽</span>${canWrite && editOn && pages.length > 1 ? `<button class="lk" data-delpg="${i}">이 쪽 삭제</button>` : ''}</div><div class="paper">${sanitizePage(p)}</div></div>`).join('');
   pagesEls().forEach(pg => { if (canWrite && editOn) markEditable(pg); });
   document.body.classList.toggle('viewing', !(canWrite && editOn));
@@ -665,6 +778,7 @@ function renderEditor(id){
   </div>
   <div class="ed">
     <nav class="side" id="side" aria-label="쪽 목록"></nav>
+    <aside class="fp" id="fp" hidden aria-label="기본정보"></aside>
     <div class="desk" id="desk"></div>
   </div>
   <div class="tbt stb" id="stb" hidden role="toolbar" aria-label="조항 편집"><div class="tg"><span>조항</span><button data-s="add" title="아래에 새 조항 추가">+ 조항</button><button data-s="table" title="이 조항에 표 넣기">+ 표</button><button data-s="up" title="위로 옮기기">↑</button><button data-s="down" title="아래로 옮기기">↓</button><button data-s="del" title="조항 삭제">삭제</button></div></div>
@@ -746,7 +860,8 @@ function renderEditor(id){
   $('#back').onclick = () => { location.hash = ''; };
   $('#findb').onclick = openFind; bindFind();
   $('#fpb').onclick = () => { if ($('#fp') && !$('#fp').hidden) closeFP(); else openFP(); };
-  closeFP();
+  closeFP(); try { if (localStorage.getItem('opk-side-off') === '1') sideToggle(true); } catch {}
+  setTimeout(() => { if (canWrite && editOn && fpPref('open', '1') === '1') openFP(); }, 0);
   const sb = $('#save'); if (sb) sb.onclick = save;
   const ub = $('#undo'); if (ub) ub.onclick = undo; const rb = $('#redo'); if (rb) rb.onclick = redo;
   $('#keys').onclick = () => ask('단축키', 'Enter  번호(1. ①)·말머리표(● ○ •) 다음 줄 추가\n여러 줄 드래그 → Delete  고른 줄 한꺼번에 지우기\n표 칸 드래그 / Shift+클릭  칸 고르기 → Ctrl+M 합치기\n날짜 글자 두 번 클릭  달력에서 날짜 고르기\nCtrl+C (선택 없이)  줄 전체 복사\nCtrl+V  복사한 줄을 아래에 붙이기\nCtrl+D 또는 Alt+클릭  줄 복제\nShift+Enter  같은 칸 안에서 줄바꿈\nBackspace  빈 번호 줄 지우기\nCtrl+Z  되돌리기\nCtrl+Shift+Z / Ctrl+Y  다시 하기\nCtrl+F  계약서 안에서 찾기\nCtrl+S  저장\nCtrl+B  굵게\nEsc  편집 끝내기\nCtrl+E  편집 켜기/끄기\nAlt+↑ / Alt+↓  이전·다음 쪽\nCtrl+Shift+E  PDF로 내보내기\n(Mac은 Ctrl 대신 ⌘)', [['닫기', true, 'pri']]);
