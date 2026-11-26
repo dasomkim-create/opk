@@ -96,25 +96,119 @@ let ftbEl = null;
 function hideFTB(){ const b = $('#ftb'); if (b) { b.hidden = true; b.querySelectorAll('.pp').forEach(x => x.hidden = true); } ftbEl = null; }
 function placeFTB(){
   const b = $('#ftb'); if (!b || !ftbEl || !ftbEl.isConnected) { hideFTB(); return; }
-  const r = ftbEl.getBoundingClientRect(), h = b.offsetHeight || 44;
+  let r = ftbEl.getBoundingClientRect(); const h = b.offsetHeight || 44;
+  if (typeof cellSel !== 'undefined' && cellSel.length > 1 && cellSel.includes(ftbEl)) { const rs = cellSel.map(x => x.getBoundingClientRect()); r = {left: Math.min(...rs.map(x => x.left)), top: Math.min(...rs.map(x => x.top)), bottom: Math.max(...rs.map(x => x.bottom))}; }
   let top = r.bottom + 8; if (top + h > innerHeight - 8) top = Math.max(70, r.top - h - 8);
   b.style.top = top + 'px'; b.style.left = Math.max(8, Math.min(r.left, innerWidth - b.offsetWidth - 8)) + 'px';
 }
 function showFTB(el){ const b = $('#ftb'); if (!b || !canWrite || !editOn) return; ftbEl = el; const fz = $('#fsz'); if (fz && document.activeElement !== fz) fz.value = Math.round(parseFloat(getComputedStyle(el).fontSize) || 12); b.querySelectorAll('.tbl').forEach(g => g.hidden = !el.closest('table.t')); b.hidden = false; placeFTB(); }
 function ftbApply(fn){ const el = ftbEl && ftbEl.isConnected ? ftbEl : null; if (!el) return; flushPend(); fn(el, getSelection()); pushHist(); markDirty(); refreshThumbs(); placeFTB(); }
+/* ---------- 날짜 고르기: 계약일·공사기간·서명란 날짜를 달력에서 ---------- */
+const DATE_RES = [[/(20\d{2}|20)\s*년\s*(\d{1,2})?\s*월\s*(\d{1,2})?\s*일/g, 'ko'], [/(20\d{2})\s*([.\-\/])\s*(\d{1,2})\s*[.\-\/]\s*(\d{1,2})(\s*\.)?/g, 'dot']];
+let calCtx = null, calView = null, calKb = null;
+function datesIn(el){
+  const out = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let n;
+  while ((n = w.nextNode())) for (const [re, kind] of DATE_RES) {
+    re.lastIndex = 0; let m;
+    while ((m = re.exec(n.textContent))) {
+      const ko = kind === 'ko';
+      out.push({node: n, start: m.index, end: m.index + m[0].length, kind, sep: ko ? '' : m[2], dot: ko ? true : !!m[5],
+        y: m[1].length === 4 ? +m[1] : null, m: +(ko ? m[2] : m[3]) || null, d: +(ko ? m[3] : m[4]) || null});
+    }
+  }
+  return out;
+}
+function dateHit(el){
+  const all = datesIn(el), s = getSelection();
+  if (s.rangeCount) { const r = s.getRangeAt(0); const h = all.find(x => r.startContainer === x.node && r.startOffset >= x.start && r.startOffset <= x.end); if (h) return h; }
+  return all.length === 1 ? all[0] : null;
+}
+const sameDay = (a, b) => a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+function closeCal(){ const c = $('#cal'); if (c) c.hidden = true; calCtx = null; }
+function openCal(el){
+  el = el || ftbEl; if (!el) return;
+  let c = $('#cal');
+  if (!c) {
+    c = document.createElement('div'); c.id = 'cal'; c.className = 'cal'; c.setAttribute('role', 'dialog'); c.setAttribute('aria-label', '날짜 고르기');
+    ($('#ftb')?.parentElement || document.body).appendChild(c);
+    c.addEventListener('mousedown', e => e.preventDefault());
+    c.addEventListener('click', e => {
+      const t = e.target.closest('button'); if (!t || !calCtx) return;
+      if (t.dataset.cv) { calView = new Date(calView.getFullYear(), calView.getMonth() + +t.dataset.cv, 1); renderCal(); }
+      else if (t.dataset.fmt) { calCtx.kind = t.dataset.fmt; renderCal(); }
+      else if (t.dataset.d) { const [y, m, d] = t.dataset.d.split('-').map(Number); putDate(new Date(y, m - 1, d)); }
+      else if ('today' in t.dataset) putDate(new Date());
+    });
+  }
+  const s = getSelection(), hit = dateHit(el);
+  const range = s.rangeCount && el.contains(s.getRangeAt(0).startContainer) ? s.getRangeAt(0).cloneRange() : null;
+  const sel = hit && hit.y && hit.m && hit.d ? new Date(hit.y, hit.m - 1, hit.d) : null;
+  calCtx = {el, hit, range, sel, kind: hit ? hit.kind : (/년/.test(el.textContent) ? 'ko' : 'dot')};
+  const base = sel || new Date(); calKb = new Date(base); calView = new Date(base.getFullYear(), base.getMonth(), 1);
+  renderCal(); c.hidden = false;
+  const ar = ($('#ftb') && !$('#ftb').hidden ? $('#ftb') : el).getBoundingClientRect();
+  let top = ar.bottom + 6; if (top + c.offsetHeight > innerHeight - 8) top = Math.max(8, ar.top - c.offsetHeight - 6);
+  c.style.top = top + 'px'; c.style.left = Math.max(8, Math.min(ar.left, innerWidth - c.offsetWidth - 8)) + 'px';
+}
+function renderCal(){
+  const c = $('#cal'); if (!c || !calCtx) return;
+  const y = calView.getFullYear(), mo = calView.getMonth(), first = new Date(y, mo, 1 - new Date(y, mo, 1).getDay()), today = new Date();
+  const chev = d => `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="${d}"/></svg>`;
+  const ex = new Date(today), f = calCtx.kind;
+  let days = '';
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(first.getFullYear(), first.getMonth(), first.getDate() + i);
+    const cls = [d.getMonth() !== mo && 'out', sameDay(d, today) && 'td', sameDay(d, calCtx.sel) && 'on', sameDay(d, calKb) && 'kb'].filter(Boolean).join(' ');
+    days += `<button type="button" class="${cls}" data-d="${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}" aria-label="${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일"${sameDay(d, calCtx.sel) ? ' aria-pressed="true"' : ''}>${d.getDate()}</button>`;
+  }
+  c.innerHTML = `<div class="cal-h"><button type="button" data-cv="-1" aria-label="이전 달">${chev('M12.5 5 7.5 10l5 5')}</button><b>${y}년 ${mo + 1}월</b><button type="button" data-cv="1" aria-label="다음 달">${chev('M7.5 5l5 5-5 5')}</button></div>`
+    + `<div class="cal-w">${['일', '월', '화', '수', '목', '금', '토'].map(w => `<span>${w}</span>`).join('')}</div><div class="cal-g">${days}</div>`
+    + `<div class="cal-f"><div class="cal-seg" role="group" aria-label="날짜 모양"><button type="button" data-fmt="dot" class="${f === 'dot' ? 'on' : ''}">${ex.getFullYear()}. ${ex.getMonth() + 1}. ${ex.getDate()}.</button><button type="button" data-fmt="ko" class="${f === 'ko' ? 'on' : ''}">${ex.getFullYear()}년 ${ex.getMonth() + 1}월 ${ex.getDate()}일</button></div><button type="button" class="cal-today" data-today>오늘</button></div>`;
+}
+function putDate(dt){
+  const {el, hit, range, kind} = calCtx; if (!el.isConnected) { closeCal(); return; }
+  const y = dt.getFullYear(), m = dt.getMonth() + 1, d = dt.getDate();
+  const keepDot = hit && hit.kind === 'dot' && kind === 'dot', sep = keepDot && hit.sep !== '.' ? hit.sep : null;
+  const str = kind === 'ko' ? `${y}년 ${m}월 ${d}일` : sep ? `${y}${sep}${String(m).padStart(2, '0')}${sep}${String(d).padStart(2, '0')}` : `${y}. ${m}. ${d}${keepDot && !hit.dot ? '' : '.'}`;
+  flushPend();
+  if (hit && hit.node.isConnected) { const t = hit.node.textContent; hit.node.textContent = t.slice(0, hit.start) + str + t.slice(hit.end); caretTo(el, true); }
+  else { el.focus(); const s = getSelection(); if (range) { s.removeAllRanges(); s.addRange(range); } else caretTo(el, true); document.execCommand('insertText', false, str); }
+  pushHist(); markDirty(); refreshThumbs(); closeCal(); toast(`날짜를 ${str} 로 넣었어요.`);
+}
+function wireCal(desk){
+  if (window.__calWired) return; window.__calWired = true;
+  document.addEventListener('mousedown', e => { if (calCtx && !e.target.closest('#cal') && !e.target.closest('[data-f="cal"]')) closeCal(); }, true);
+  document.addEventListener('keydown', e => {
+    if (!calCtx || $('#cal')?.hidden) return;
+    const mv = {ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7}[e.key];
+    if (mv) { calKb = new Date(calKb.getFullYear(), calKb.getMonth(), calKb.getDate() + mv); }
+    else if (e.key === 'PageUp' || e.key === 'PageDown') { calKb = new Date(calKb.getFullYear(), calKb.getMonth() + (e.key === 'PageUp' ? -1 : 1), calKb.getDate()); }
+    else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); putDate(calKb); return; }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCal(); return; }
+    else { closeCal(); return; }
+    e.preventDefault(); e.stopPropagation(); calView = new Date(calKb.getFullYear(), calKb.getMonth(), 1); renderCal();
+  }, true);
+  // 날짜 글자를 두 번 누르면 바로 달력
+  desk.addEventListener('dblclick', e => { if (!editOn || !canWrite) return; const ed = e.target.closest('[data-ed]'); if (ed && datesIn(ed).length) setTimeout(() => { if (dateHit(ed)) openCal(ed); }, 0); });
+}
 function wireFTB(){
   const b = $('#ftb'), desk = $('#desk'); if (!b || !desk) return;
+  wireCal(desk);
   b.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
   b.addEventListener('click', e => {
     const t = e.target.closest('button'); if (!t) return; const op = t.dataset.f;
     if (t.dataset.pop) { const pp = t.parentElement.querySelector('.pp'), open = pp.hidden; b.querySelectorAll('.pp').forEach(x => x.hidden = true); b.querySelectorAll('[data-pop]').forEach(x => x.setAttribute('aria-expanded', 'false')); pp.hidden = !open; t.setAttribute('aria-expanded', String(open)); placeFTB(); return; }
-    if ('c' in t.dataset || 'bg' in t.dataset) { b.querySelectorAll('.pp').forEach(x => x.hidden = true); b.querySelectorAll('[data-pop]').forEach(x => x.setAttribute('aria-expanded', 'false')); }
-    if (t.dataset.t) { const f = {rowup: () => addRow(false), rowdn: () => addRow(true), rowdel: delRow, colL: () => addCol(false), colR: () => addCol(true), coldel: delCol}[t.dataset.t]; if (f && tblCell) tableOp(f); return; }
+    if ('c' in t.dataset || 'bg' in t.dataset || 'l' in t.dataset) { b.querySelectorAll('.pp').forEach(x => x.hidden = true); b.querySelectorAll('[data-pop]').forEach(x => x.setAttribute('aria-expanded', 'false')); }
+    if (t.dataset.t === 'merge') { mergeSel(); return; }
+    if (t.dataset.t === 'split') { splitCell(); return; }
+    if (t.dataset.t) { const f ={rowup: () => addRow(false), rowdn: () => addRow(true), rowdel: delRow, colL: () => addCol(false), colR: () => addCol(true), coldel: delCol}[t.dataset.t]; if (f && tblCell) tableOp(f); return; }
     if ('bg' in t.dataset) { if (tblCell) tableOp(() => paint(t.dataset.bg, $('#scope2').value)); return; }
     const hasSel = s => s.rangeCount && !s.isCollapsed && ftbEl.contains(s.anchorNode);
     if (op === 'bold') ftbApply((el, s) => { if (hasSel(s)) document.execCommand('bold'); else el.style.fontWeight = +getComputedStyle(el).fontWeight >= 600 ? '400' : '700'; });
     else if (op === 'left' || op === 'center' || op === 'right') ftbApply(el => { el.style.textAlign = op; if (getComputedStyle(el).display === 'flex') el.style.justifyContent = op === 'center' ? 'center' : op === 'right' ? 'flex-end' : 'flex-start'; });
     else if (op === 'up' || op === 'down') { const fz = $('#fsz'); setSize((+fz.value || 12) + (op === 'up' ? 1 : -1), true); }
+    else if ('l' in t.dataset) ftbApply(el => setListMark(el, t.dataset.l));
+    else if (op === 'cal') { if (calCtx && !$('#cal').hidden) closeCal(); else openCal(ftbEl); }
     else if ('c' in t.dataset) ftbApply((el, s) => { const c = t.dataset.c; if (hasSel(s)) document.execCommand('foreColor', false, c || '#333333'); else el.style.color = c; });
   });
   const fz = $('#fsz');

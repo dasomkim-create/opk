@@ -183,18 +183,21 @@ async function remove(id){
 const BLOCK = 'P,DIV,TABLE,H1,H2,UL,OL,SECTION,HEADER,TR,TBODY,THEAD';
 function markEditable(root){
   root.querySelectorAll('*').forEach(el => {
-    if (el.closest('svg') || el.closest('[data-ed]')) return;
+    if (el.closest('svg') || el.closest('[data-ed]') || el.closest('.fld')) return;
     if (['TABLE','TBODY','THEAD','TR','SECTION','HEADER','COLGROUP','COL','BR','IMG'].includes(el.tagName)) return;
-    const direct = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
+    const direct = [...el.childNodes].some(n => (n.nodeType === 3 && n.textContent.trim()) || (n.nodeType === 1 && n.classList.contains('fld')));
     const hasBlock = el.querySelector(BLOCK);
     const emptyCell = (el.tagName === 'TD' || el.tagName === 'TH') && !el.textContent.trim() && !el.querySelector(BLOCK);
     if ((direct || emptyCell) && !hasBlock) { el.setAttribute('contenteditable', 'true'); el.setAttribute('data-ed', ''); el.spellcheck = false; }
   });
+  root.querySelectorAll('.fld').forEach(f => f.setAttribute('contenteditable', 'false'));
 }
 function cleanHTML(pg){
   const c = pg.cloneNode(true);
   c.querySelectorAll('[data-ed]').forEach(el => { el.removeAttribute('contenteditable'); el.removeAttribute('data-ed'); el.removeAttribute('spellcheck'); });
   c.querySelectorAll('.cell-on').forEach(el => el.classList.remove('cell-on'));
+  c.querySelectorAll('.fld').forEach(el => { el.removeAttribute('contenteditable'); el.classList.remove('fld-hi'); });
+  c.querySelectorAll('.blk, .cell-sel').forEach(el => { el.classList.remove('blk', 'cell-sel'); if (!el.className) el.removeAttribute('class'); });
   c.style.transform = '';
   return sanitizePage(c.outerHTML);
 }
@@ -298,21 +301,113 @@ function tableOp(fn){
   if (keep.isConnected) showTT(keep); else hideTT();
 }
 
+/* 표 칸 여러 개 고르기(드래그 또는 Shift+클릭) → 병합 / 나누기 */
+let cellSel = [], cellDrag = null;
+const tCell = el => { const c = el && el.closest && el.closest('td,th'); return c && c.closest('table.t') && c.closest('#desk') ? c : null; };
+function cellClear(){ document.querySelectorAll('.cell-sel').forEach(x => x.classList.remove('cell-sel')); cellSel = []; }
+function cellRect(t, a, b){
+  const g = grid(t); const [ar, ac] = pos(g, a), [br, bc] = pos(g, b);
+  let r1 = Math.min(ar, br), r2 = Math.max(ar + a.rowSpan, br + b.rowSpan) - 1, c1 = Math.min(ac, bc), c2 = Math.max(ac + a.colSpan, bc + b.colSpan) - 1;
+  for (let grow = true; grow;) {
+    grow = false;
+    for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) {
+      const x = g[r] && g[r][c]; if (!x) continue; const [xr, xc] = pos(g, x);
+      if (xr < r1) { r1 = xr; grow = true; } if (xc < c1) { c1 = xc; grow = true; }
+      if (xr + x.rowSpan - 1 > r2) { r2 = xr + x.rowSpan - 1; grow = true; } if (xc + x.colSpan - 1 > c2) { c2 = xc + x.colSpan - 1; grow = true; }
+    }
+  }
+  const cells = []; for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) { const x = g[r] && g[r][c]; if (x && !cells.includes(x)) cells.push(x); }
+  return {g, r1, r2, c1, c2, cells};
+}
+function cellSelect(a, b){ cellClear(); if (a === b) return; cellSel = cellRect(a.closest('table'), a, b).cells; cellSel.forEach(x => x.classList.add('cell-sel')); }
+function mergeSel(){
+  if (cellSel.length < 2) { toast('합칠 칸을 드래그해서 두 칸 이상 골라 주세요. (Shift+클릭도 돼요)'); return; }
+  flushPend();
+  const t = cellSel[0].closest('table'), {g, r1, r2, c1, c2, cells} = cellRect(t, cellSel[0], cellSel[cellSel.length - 1]);
+  const o = g[r1][c1]; let w = 0;
+  cells.forEach(x => {
+    if (x === o) return;
+    if (x.textContent.trim()) { if (o.textContent.trim()) o.appendChild(document.createElement('br')); while (x.firstChild) o.appendChild(x.firstChild); }
+    if (x.parentNode === t.rows[0] && x.style.width) w += parseFloat(x.style.width) || 0;
+    x.remove();
+  });
+  if (w && o.style.width) o.style.width = (parseFloat(o.style.width) + w) + 'px';
+  o.colSpan = c2 - c1 + 1; o.rowSpan = r2 - r1 + 1;
+  cellClear(); pushHist(); markDirty(); refreshThumbs(); showTT(o); toast('칸을 합쳤어요.');
+}
+function splitCell(){
+  if (cellSel.length > 1) { cellSel.filter(x => x.colSpan > 1 || x.rowSpan > 1).forEach(x => { tblCell = x; splitCell(); }); cellClear(); return; }
+  const o = tblCell; if (!o || (o.colSpan < 2 && o.rowSpan < 2)) { toast('합쳐진 칸을 눌러 주세요.'); return; }
+  flushPend();
+  const t = o.closest('table'), g = grid(t), [r0, c0] = pos(g, o), rs = o.rowSpan, cs = o.colSpan;
+  const tag = o.tagName.toLowerCase(), w = o.parentNode === t.rows[0] && o.style.width ? parseFloat(o.style.width) / cs : 0;
+  o.colSpan = 1; o.rowSpan = 1; if (w) o.style.width = w + 'px';
+  for (let r = r0; r < r0 + rs; r++) {
+    const row = t.rows[r]; if (!row) continue;
+    for (let c = c0; c < c0 + cs; c++) {
+      if (r === r0 && c === c0) continue;
+      const n = blankLike(o, tag); n.classList.remove('cell-sel'); n.removeAttribute('colspan'); n.removeAttribute('rowspan'); if (w) n.style.width = w + 'px'; else n.style.removeProperty('width');
+      let ref = null; for (const x of row.cells) { if (x !== o && !x.hasAttribute('data-new') && pos(g, x)[1] > c) { ref = x; break; } }
+      n.setAttribute('data-new', ''); row.insertBefore(n, ref);
+    }
+  }
+  t.querySelectorAll('[data-new]').forEach(x => x.removeAttribute('data-new'));
+  pushHist(); markDirty(); refreshThumbs(); showTT(o); toast('칸을 나눴어요.');
+}
+function wireCells(desk){
+  desk.addEventListener('mousedown', e => {
+    const c = canWrite && editOn && e.button === 0 ? tCell(e.target) : null;
+    if (c && e.shiftKey && tblCell && tblCell !== c && tblCell.closest('table') === c.closest('table')) { e.preventDefault(); cellSelect(tblCell, c); return; }
+    if (!e.target.closest('#ftb')) cellClear();
+    cellDrag = c ? {a: c, on: false} : null; if (c) ftbGhost(true);
+  });
+  desk.addEventListener('mousemove', e => {
+    if (!cellDrag || !(e.buttons & 1)) return;
+    const c = tCell(document.elementFromPoint(e.clientX, e.clientY));
+    if (!c || c.closest('table') !== cellDrag.a.closest('table') || (c === cellDrag.a && !cellDrag.on)) return;
+    if (!cellDrag.on) { cellDrag.on = true; desk.classList.add('blking'); }
+    getSelection().removeAllRanges(); cellSelect(cellDrag.a, c);
+  });
+  if (window.__cellWired) return; window.__cellWired = true;
+  document.addEventListener('mouseup', () => { if (cellDrag && cellDrag.on && cellDrag.a.isConnected) { const a = cellDrag.a; a.focus({preventScroll: true}); setTimeout(() => { if (a.isConnected) showTT(a); }, 30); } cellDrag = null; });
+  document.addEventListener('keydown', e => {
+    if (cellSel.length < 2) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); flushPend(); cellSel.forEach(x => { x.innerHTML = '<br>'; }); pushHist(); markDirty(); refreshThumbs(); }
+    else if (e.key === 'Escape') cellClear();
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'm') { e.preventDefault(); mergeSel(); }
+    else if (!['Shift', 'Control', 'Meta', 'Alt'].includes(e.key)) cellClear();
+  }, true);
+}
+
 
 /* list lines: Enter adds the next number or bullet */
-const NUM = /^(\s*)(\d+)\.(\s)/, BUL = /^(\s*)([•·\-])(\s)/;
+/* 1. 2. 3. · ①②③ (원문자, 20까지) · 말머리표 • · - ● ○ ■ □ ◦ ▪ ※ */
+const NUM = /^(\s*)(\d+)\.(\s)/, CNUM = /^(\s*)([①-⑳])(\s?)/, BUL = /^(\s*)([•·\-●○■□◦▪※])(\s)/;
+const MARK = /^\s*(?:\d+\.|[①-⑳]|[•·\-●○■□◦▪※])\s*/, MARK_ONLY = /^\s*(?:\d+\.|[①-⑳]|[•·\-●○■□◦▪※])?\s*$/;
+const circ = n => String.fromCharCode(0x245F + Math.min(20, Math.max(1, n)));
 function firstText(el){ const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) if (n.textContent.length) return n; return null; }
+function listKind(txt){ let m = txt.match(NUM); if (m) return {k: 'n', n: +m[2]}; m = txt.match(CNUM); if (m) return {k: 'c', n: m[2].charCodeAt(0) - 0x245F}; return null; }
 function renum(parent){
-  let n = null;
+  let k = null, n = 0;
   for (const p of parent.children) {
-    if (p.tagName !== 'P') { n = null; continue; }
-    const t = firstText(p), m = t && t.textContent.match(NUM);
-    if (!m) { n = null; continue; }
-    if (n === null) n = +m[2]; else { n++; t.textContent = t.textContent.replace(NUM, `$1${n}.$3`); }
+    const t = p.tagName === 'P' ? firstText(p) : null, x = t && listKind(t.textContent);
+    if (!x || x.k !== k) { k = x ? x.k : null; n = x ? x.n : 0; continue; }
+    n++;
+    if (k === 'n') t.textContent = t.textContent.replace(NUM, `$1${n}.$3`);
+    else if (n <= 20) t.textContent = t.textContent.replace(CNUM, `$1${circ(n)}$3`);
   }
 }
+/* 툴바 목록 버튼: 줄 앞 표시를 바꾸거나 지움 (kind: 'n' | 'c' | 말머리표 글자 | '') */
+function setListMark(el, kind){
+  const prefix = kind === 'n' ? '1. ' : kind === 'c' ? '① ' : kind ? kind + ' ' : '';
+  const t = firstText(el);
+  if (t) t.textContent = prefix + t.textContent.replace(MARK, '');
+  else if (prefix) el.prepend(document.createTextNode(prefix));
+  if (el.parentNode) renum(el.parentNode);
+  caretTo(el, true);
+}
 function caretTo(el, atEnd){ const r = document.createRange(); r.selectNodeContents(el); r.collapse(!atEnd); const s = getSelection(); s.removeAllRanges(); s.addRange(r); el.focus(); }
-function atStart(el){ const s = getSelection(); if (!s.rangeCount || !s.isCollapsed) return false; const r = document.createRange(); r.selectNodeContents(el); r.setEnd(s.getRangeAt(0).startContainer, s.getRangeAt(0).startOffset); return !r.toString().trim() || /^\s*((\d+)\.|[•·\-])\s*$/.test(r.toString()); }
+function atStart(el){ const s = getSelection(); if (!s.rangeCount || !s.isCollapsed) return false; const r = document.createRange(); r.selectNodeContents(el); r.setEnd(s.getRangeAt(0).startContainer, s.getRangeAt(0).startOffset); return !r.toString().trim() || MARK_ONLY.test(r.toString()); }
 function splitPara(p){
   flushPend();
   const s = getSelection(); if (!s.rangeCount) return;
@@ -320,13 +415,13 @@ function splitPara(p){
   const tail = document.createRange(); tail.setStart(r.startContainer, r.startOffset); tail.setEnd(p, p.childNodes.length);
   const frag = tail.extractContents();
   const t = firstText(p), txt = t ? t.textContent : '';
-  const m = txt.match(NUM), b = txt.match(BUL);
+  const m = txt.match(NUM), c = txt.match(CNUM), b = txt.match(BUL);
   const np = p.cloneNode(false);
-  const prefix = m ? `${m[1]}${+m[2] + 1}.\u00a0` : b ? `${b[1]}${b[2]}\u00a0` : '';
+  const prefix = m ? `${m[1]}${+m[2] + 1}.\u00a0` : c ? `${c[1]}${circ(c[2].charCodeAt(0) - 0x245F + 1)}${c[3] ? '\u00a0' : ''}` : b ? `${b[1]}${b[2]}\u00a0` : '';
   np.appendChild(document.createTextNode(prefix)); np.appendChild(frag);
   if (!p.textContent.length) p.appendChild(document.createElement('br'));
   p.after(np);
-  if (m) renum(p.parentNode);
+  if (m || c) renum(p.parentNode);
   const tn = np.firstChild; const rr = document.createRange(); rr.setStart(tn, prefix.length); rr.collapse(true); s.removeAllRanges(); s.addRange(rr); np.focus();
   pushHist(); markDirty(); refreshThumbs();
 }
@@ -335,6 +430,136 @@ function joinPrev(p){
   const prev = p.previousElementSibling, parent = p.parentNode;
   p.remove(); renum(parent); caretTo(prev, true);
   pushHist(); markDirty(); refreshThumbs();
+}
+
+
+/* 기본정보 입력칸: 계약서 곳곳의 밑줄 칸(.fld, data-k=항목 이름)을 한 곳에서 채우면 같은 항목이 모두 바뀜 */
+const FLD_PRESETS = ['발주자', '시공사', '시공사 대표자', '공사명', '현장주소', '계약일', '공사기간', '총 공사금액'];
+const FLD_STYLE = 'display: inline-block; min-width: 72px; padding: 0 3px; border-bottom: 1px solid #333333; text-align: center; line-height: 1.35';
+let fldRange = null, fldTimer = null; const fpVals = {};
+const fldAll = k => [...document.querySelectorAll('#desk .fld')].filter(f => k == null || f.dataset.k === k);
+function fldKeys(){ const ks = [...FLD_PRESETS]; fldAll().forEach(f => { if (f.dataset.k && !ks.includes(f.dataset.k)) ks.push(f.dataset.k); }); return ks; }
+function fldMake(k, v){ const s = document.createElement('span'); s.className = 'fld'; s.dataset.k = k; s.setAttribute('style', FLD_STYLE); s.setAttribute('contenteditable', 'false'); s.title = k; s.textContent = v || ''; return s; }
+function fldSet(k, v){
+  fldAll(k).forEach(f => { if (f.textContent !== v) f.textContent = v; });
+  markDirty(); refreshThumbs(); clearTimeout(fldTimer); fldTimer = setTimeout(pushHist, 600);
+}
+function fldInsert(k, v){
+  const r = fldRange; const host = r && r.startContainer && (r.startContainer.nodeType === 1 ? r.startContainer : r.startContainer.parentElement)?.closest('[data-ed]');
+  if (!host || !host.isConnected) { toast('먼저 계약서에서 칸을 넣을 자리를 눌러 주세요.'); return; }
+  flushPend(); const s = fldMake(k, v);
+  r.deleteContents(); r.insertNode(s);
+  const after = document.createTextNode(' '); s.after(after);
+  const nr = document.createRange(); nr.setStartAfter(after); nr.collapse(true); fldRange = nr;
+  pushHist(); markDirty(); refreshThumbs(); renderFP(); toast(`‘${k}’ 칸을 넣었어요. 기본정보에서 채우면 같은 칸이 모두 바뀌어요.`);
+}
+/* 이미 적힌 글자(예: ○○건설)를 같은 항목 칸으로 한꺼번에 바꾸기 */
+function fldLink(k, text){
+  text = text.trim(); if (!text) { toast('먼저 값을 적어 주세요. 계약서에 같은 글자가 있으면 모두 칸으로 바꿔요.'); return; }
+  flushPend(); let n = 0;
+  document.querySelectorAll('#desk .pg').forEach(pg => {
+    const w = document.createTreeWalker(pg, NodeFilter.SHOW_TEXT, {acceptNode: x => x.parentElement.closest('.fld') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT});
+    const nodes = []; let x; while ((x = w.nextNode())) if (x.textContent.includes(text)) nodes.push(x);
+    nodes.forEach(node => {
+      const parts = node.textContent.split(text), frag = document.createDocumentFragment();
+      parts.forEach((p, i) => { if (p) frag.appendChild(document.createTextNode(p)); if (i < parts.length - 1) { frag.appendChild(fldMake(k, text)); n++; } });
+      node.replaceWith(frag);
+    });
+  });
+  if (!n) { toast(`계약서에 ‘${text}’ 글자가 없어요.`); return; }
+  pushHist(); markDirty(); refreshThumbs(); renderFP(); toast(`‘${text}’ ${n}곳을 ‘${k}’ 칸으로 바꿨어요.`);
+}
+function renderFP(focusKey){
+  const p = $('#fp'); if (!p || p.hidden) return;
+  const esc2 = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  p.querySelector('.fp-list').innerHTML = fldKeys().map(k => {
+    const fs = fldAll(k), v = fs[0] ? fs[0].textContent : (fpVals[k] || '');
+    return `<div class="fp-row" data-k="${esc2(k)}"><label><span>${esc2(k)}</span><small>${fs.length ? fs.length + '곳' : '아직 없음'}</small></label>
+      <input class="fp-in" value="${esc2(v)}" placeholder="입력하면 계약서에 바로 들어가요" aria-label="${esc2(k)}">
+      <div class="fp-act"><button type="button" data-fa="ins" title="누른 자리에 이 칸 넣기">자리에 넣기</button><button type="button" data-fa="link" title="계약서에 같은 글자가 있으면 모두 이 칸으로">같은 글자 연결</button>${fs.length ? '<button type="button" data-fa="show" title="계약서에서 이 칸 보기">찾기</button>' : ''}</div></div>`;
+  }).join('');
+  if (focusKey) { const i = [...p.querySelectorAll('.fp-row')].find(r => r.dataset.k === focusKey)?.querySelector('input'); if (i) { i.focus(); i.select(); } }
+}
+function openFP(focusKey){
+  if (!canWrite || !editOn) { toast('편집을 켜면 기본정보를 채울 수 있어요.'); return; }
+  let p = $('#fp');
+  if (!p) {
+    p = document.createElement('aside'); p.id = 'fp'; p.className = 'fp'; p.setAttribute('aria-label', '기본정보');
+    p.innerHTML = `<div class="fp-h"><b>기본정보</b><button type="button" class="fp-x" aria-label="닫기"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5 5 15"/></svg></button></div>
+      <p class="fp-help">여기 적으면 계약서의 같은 항목 칸이 모두 함께 바뀌어요. 계약서에서 넣을 자리를 누르고 ‘자리에 넣기’, 이미 적힌 글자는 ‘같은 글자 연결’.</p>
+      <div class="fp-list"></div>
+      <form class="fp-add"><input placeholder="새 항목 이름 (예: 계좌번호)" aria-label="새 항목 이름" maxlength="30"><button type="submit">추가</button></form>`;
+    ($('#ftb')?.parentElement || document.body).appendChild(p);
+    p.addEventListener('mousedown', e => { if (e.target.closest('button')) e.preventDefault(); });
+    p.querySelector('.fp-x').onclick = closeFP;
+    p.addEventListener('input', e => { const i = e.target.closest('.fp-in'); if (!i) return; const k = i.closest('.fp-row').dataset.k; fpVals[k] = i.value; fldSet(k, i.value); const sm = i.closest('.fp-row').querySelector('small'); if (sm) sm.textContent = fldAll(k).length ? fldAll(k).length + '곳' : '아직 없음'; });
+    p.addEventListener('click', e => {
+      const b = e.target.closest('[data-fa]'); if (!b) return; const row = b.closest('.fp-row'), k = row.dataset.k, v = row.querySelector('.fp-in').value;
+      if (b.dataset.fa === 'ins') fldInsert(k, v);
+      else if (b.dataset.fa === 'link') fldLink(k, v);
+      else if (b.dataset.fa === 'show') { const fs = fldAll(k); fs.forEach(f => f.classList.add('fld-hi')); fs[0]?.scrollIntoView({block: 'center', behavior: 'smooth'}); setTimeout(() => fs.forEach(f => f.classList.remove('fld-hi')), 1600); }
+    });
+    p.querySelector('.fp-add').addEventListener('submit', e => {
+      e.preventDefault(); const i = e.target.querySelector('input'), k = i.value.trim().replace(/\s+/g, ' '); if (!k) return;
+      if (!FLD_PRESETS.includes(k)) FLD_PRESETS.push(k); i.value = ''; renderFP(k);
+    });
+  }
+  p.hidden = false; $('#fpb')?.setAttribute('aria-pressed', 'true'); renderFP(focusKey);
+}
+function closeFP(){ const p = $('#fp'); if (p) p.hidden = true; $('#fpb')?.setAttribute('aria-pressed', 'false'); }
+function wireFld(desk){
+  const rem = () => { const s = getSelection(); if (!s.rangeCount) return; const r = s.getRangeAt(0); const n = r.startContainer; const el = n.nodeType === 1 ? n : n.parentElement; if (el && el.closest('#desk [data-ed]') && !el.closest('.fld')) fldRange = r.cloneRange(); };
+  desk.addEventListener('keyup', rem); desk.addEventListener('mouseup', () => setTimeout(rem, 0));
+  desk.addEventListener('click', e => { const f = e.target.closest('.fld'); if (f && canWrite && editOn) { e.preventDefault(); openFP(f.dataset.k); } });
+  desk.addEventListener('keydown', e => {
+    // 칸 바로 뒤에서 Backspace → 칸 지우기
+    if (e.key !== 'Backspace') return; const s = getSelection(); if (!s.isCollapsed || !s.rangeCount) return;
+    const r = s.getRangeAt(0); let prev = null;
+    if (r.startContainer.nodeType === 3 && r.startOffset === 0) prev = r.startContainer.previousSibling;
+    else if (r.startContainer.nodeType === 1 && r.startOffset > 0) prev = r.startContainer.childNodes[r.startOffset - 1];
+    if (prev && prev.nodeType === 1 && prev.classList.contains('fld')) { e.preventDefault(); flushPend(); prev.remove(); pushHist(); markDirty(); refreshThumbs(); renderFP(); }
+  });
+}
+
+
+/* 블록 선택: 여러 줄을 드래그해서 고르고 Delete / Backspace 로 한꺼번에 지우기 */
+let blkSel = [], blkDrag = null;
+/* 드래그하는 동안 떠 있는 툴바가 아래 줄을 가리지 않게 잠깐 투명·통과 */
+function ftbGhost(on){ const b = document.querySelector('#ftb'); if (b) { b.style.pointerEvents = on ? 'none' : ''; b.style.opacity = on ? '0' : ''; } }
+const isLine = el => !!el && el.tagName === 'P' && el.hasAttribute('data-ed') && !el.closest('td,th');
+function blkClear(){ blkSel.forEach(p => p.classList.remove('blk')); blkSel = []; }
+function blkSet(a, b){
+  const all = [...document.querySelectorAll('#desk [data-ed]')].filter(isLine);
+  let i = all.indexOf(a), j = all.indexOf(b); if (i < 0 || j < 0) return; if (i > j) [i, j] = [j, i];
+  blkClear(); blkSel = all.slice(i, j + 1); blkSel.forEach(p => p.classList.add('blk'));
+}
+function blkDelete(){
+  flushPend(); const n = blkSel.length, parents = new Set(blkSel.map(p => p.parentNode));
+  blkSel.forEach(p => p.remove()); blkSel = [];
+  parents.forEach(pr => { if (pr.isConnected) renum(pr); });
+  pushHist(); markDirty(); refreshThumbs(); toast(`${n}줄을 지웠어요. Ctrl+Z 로 되돌릴 수 있어요.`);
+}
+function wireBlk(desk){
+  desk.addEventListener('mousedown', e => {
+    blkClear(); blkDrag = null;
+    if (e.button !== 0 || e.altKey || !editOn || !canWrite) return;
+    const p = e.target.closest && e.target.closest('[data-ed]');
+    if (isLine(p)) { blkDrag = {start: p, on: false}; ftbGhost(true); }
+  });
+  desk.addEventListener('mousemove', e => {
+    if (!blkDrag || !(e.buttons & 1)) return;
+    const el = document.elementFromPoint(e.clientX, e.clientY), p = el && el.closest && el.closest('[data-ed]');
+    if (!isLine(p) || (p === blkDrag.start && !blkDrag.on)) return;
+    if (!blkDrag.on) { blkDrag.on = true; desk.classList.add('blking'); document.activeElement?.blur?.(); }
+    getSelection().removeAllRanges(); blkSet(blkDrag.start, p);
+  });
+  if (window.__blkWired) return; window.__blkWired = true;
+  document.addEventListener('mouseup', () => { blkDrag = null; ftbGhost(false); document.querySelectorAll('.blking').forEach(d => d.classList.remove('blking')); });
+  document.addEventListener('keydown', e => {
+    if (!blkSel.length) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); if (blkSel[0].isConnected) blkDelete(); else blkSel = []; }
+    else if (!['Shift', 'Control', 'Meta', 'Alt'].includes(e.key)) blkClear();
+  }, true);
 }
 
 
@@ -434,6 +659,7 @@ function renderEditor(id){
         <button role="menuitem" data-x="jpg">JPG<small>쪽마다 한 장씩</small></button>
         <button role="menuitem" data-x="docx">독스 파일 (.docx)<small>구글 독스·워드·한글에서 열어요</small></button>
       </div></div>
+    <button class="btn" id="fpb" aria-pressed="false" title="기본정보 — 한 번 적으면 계약서의 같은 칸이 모두 채워져요"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h7"/><path d="M15 17h5" stroke-dasharray="2 2"/></svg>기본정보</button>
     <button class="btn icon" id="findb" title="찾기 (Ctrl+F)" aria-label="찾기"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
     <button class="btn icon ghost" id="keys" title="단축키" aria-label="단축키 보기">?</button>
   </div>
@@ -465,7 +691,7 @@ function renderEditor(id){
     const ed = e.target.closest && e.target.closest('[data-ed]'); if (!ed) return;
     if (e.key === 'Enter' && !e.shiftKey && ed.tagName === 'P') { e.preventDefault(); splitPara(ed); return; }
     if (e.key === 'Enter') { e.preventDefault(); document.execCommand('insertLineBreak'); return; }
-    if (e.key === 'Backspace' && ed.tagName === 'P' && atStart(ed) && ed.previousElementSibling?.tagName === 'P' && /^\s*((\d+)\.|[•·\-])?\s*$/.test(ed.textContent)) { e.preventDefault(); joinPrev(ed); }
+    if (e.key === 'Backspace' && ed.tagName === 'P' && atStart(ed) && ed.previousElementSibling?.tagName === 'P' && MARK_ONLY.test(ed.textContent)) { e.preventDefault(); joinPrev(ed); }
   });
   desk.addEventListener('paste', e => {
     if (!e.target.closest('[data-ed]')) return; e.preventDefault();
@@ -479,6 +705,7 @@ function renderEditor(id){
     e.preventDefault(); const text = p.textContent; e.clipboardData.setData('text/plain', text);
     lineClip = {el: p.cloneNode(true), text}; toast('줄을 복사했어요. 붙여 넣을 줄을 누르고 Ctrl+V 하면 그 아래에 들어가요.');
   });
+  wireBlk(desk); wireCells(desk); wireFld(desk);
   desk.addEventListener('mousedown', e => { if (!e.altKey || !canWrite) return; const p = lineOf(e.target); if (p) { e.preventDefault(); insertLineAfter(p, p); toast('줄을 복제했어요.'); } });
   desk.addEventListener('focusin', e => { const cell = canWrite && e.target.closest('td,th'); if (cell && cell.closest('table.t')) showTT(cell); });
   desk.addEventListener('click', e => { const cell = canWrite && e.target.closest('td,th'); if (cell && cell.closest('table.t')) showTT(cell); else if (!e.target.closest('#tt')) hideTT(); });
@@ -518,9 +745,11 @@ function renderEditor(id){
   $('#tname').addEventListener('input', markDirty);
   $('#back').onclick = () => { location.hash = ''; };
   $('#findb').onclick = openFind; bindFind();
+  $('#fpb').onclick = () => { if ($('#fp') && !$('#fp').hidden) closeFP(); else openFP(); };
+  closeFP();
   const sb = $('#save'); if (sb) sb.onclick = save;
   const ub = $('#undo'); if (ub) ub.onclick = undo; const rb = $('#redo'); if (rb) rb.onclick = redo;
-  $('#keys').onclick = () => ask('단축키', 'Enter  번호·글머리표 다음 줄 추가\nCtrl+C (선택 없이)  줄 전체 복사\nCtrl+V  복사한 줄을 아래에 붙이기\nCtrl+D 또는 Alt+클릭  줄 복제\nShift+Enter  같은 칸 안에서 줄바꿈\nBackspace  빈 번호 줄 지우기\nCtrl+Z  되돌리기\nCtrl+Shift+Z / Ctrl+Y  다시 하기\nCtrl+F  계약서 안에서 찾기\nCtrl+S  저장\nCtrl+B  굵게\nEsc  편집 끝내기\nCtrl+E  편집 켜기/끄기\nAlt+↑ / Alt+↓  이전·다음 쪽\nCtrl+Shift+E  PDF로 내보내기\n(Mac은 Ctrl 대신 ⌘)', [['닫기', true, 'pri']]);
+  $('#keys').onclick = () => ask('단축키', 'Enter  번호(1. ①)·말머리표(● ○ •) 다음 줄 추가\n여러 줄 드래그 → Delete  고른 줄 한꺼번에 지우기\n표 칸 드래그 / Shift+클릭  칸 고르기 → Ctrl+M 합치기\n날짜 글자 두 번 클릭  달력에서 날짜 고르기\nCtrl+C (선택 없이)  줄 전체 복사\nCtrl+V  복사한 줄을 아래에 붙이기\nCtrl+D 또는 Alt+클릭  줄 복제\nShift+Enter  같은 칸 안에서 줄바꿈\nBackspace  빈 번호 줄 지우기\nCtrl+Z  되돌리기\nCtrl+Shift+Z / Ctrl+Y  다시 하기\nCtrl+F  계약서 안에서 찾기\nCtrl+S  저장\nCtrl+B  굵게\nEsc  편집 끝내기\nCtrl+E  편집 켜기/끄기\nAlt+↑ / Alt+↓  이전·다음 쪽\nCtrl+Shift+E  PDF로 내보내기\n(Mac은 Ctrl 대신 ⌘)', [['닫기', true, 'pri']]);
   const menu = $('#menu'), eb = $('#expb');
   eb.onclick = e => { e.stopPropagation(); const o = menu.classList.toggle('open'); eb.setAttribute('aria-expanded', o); };
   menu.querySelectorAll('[data-x]').forEach(b => b.onclick = () => { menu.classList.remove('open'); exportAs(b.dataset.x); });
