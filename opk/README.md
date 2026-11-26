@@ -42,7 +42,7 @@ wrangler.toml      Worker 설정
 
 1. **D1 만들기** — Storage & Databases → D1 → Create → 이름 `opk-tools` → 만든 뒤 Database ID 를
    `wrangler.toml` 의 `database_id` 에 넣고 커밋. (테이블과 예시 데이터는 첫 접속 때 Worker 가 자동으로 만듭니다)
-2. **Worker 만들기** — Workers & Pages → 애플리케이션 생성 → Git 저장소 가져오기 → `dasomkim-create/opk`
+2. **Worker 만들기** — Workers & Pages → 애플리케이션 생성 → Git 저장소 가져오기 → `dasomkim-create/opk`, 프로젝트 이름 `opk-vitools`
    - Root directory: `opk` (저장소 안 `opk/` 폴더)
    - Deploy command: `npx wrangler deploy`
 3. **Secret 넣기** — 만든 Worker → 설정 → 변수 및 비밀 → `ADMIN_PASSWORD`, `STAFF_PASSWORD`

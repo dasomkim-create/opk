@@ -1,5 +1,5 @@
 {
-  "name": "opk-tools",
+  "name": "opk-vitools",
   "private": true,
   "version": "1.0.0",
   "description": "OPK 업무 도구 — 계약서 편집기와 메일 서명 편집기 (Cloudflare Workers + D1)",

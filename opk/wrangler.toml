@@ -1,5 +1,5 @@
 # OPK 업무 도구 — 홈페이지(opk-korea-main)와 완전히 분리된 별도 Worker / D1 입니다.
-name = "opk-tools"
+name = "opk-vitools"
 main = "src/worker.js"
 compatibility_date = "2025-06-01"
 
