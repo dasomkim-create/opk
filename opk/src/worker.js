@@ -33,13 +33,14 @@ async function handle(req, env, url) {
   const parts = url.pathname.replace(/^\/api\//, '').split('/').filter(Boolean).map(decodeURIComponent);
   const method = req.method.toUpperCase();
 
-  if (parts[0] === 'me' && method === 'GET') return json({ email, admin, ai: !!env.ANTHROPIC_API_KEY, auth: env.ACCESS_AUD ? 'access' : 'password' });
+  if (parts[0] === 'me' && method === 'GET') return json({ email, admin, ai: !!(env.ANTHROPIC_API_KEY || env.AI), auth: env.ACCESS_AUD ? 'access' : 'password' });
 
   if (parts[0] === 'ai' && method === 'POST') {
     if (!admin) throw new HttpError(403, 'admin only');
-    if (!env.ANTHROPIC_API_KEY) throw new HttpError(501, 'AI not configured');
+    if (!env.ANTHROPIC_API_KEY && !env.AI) throw new HttpError(501, 'AI not configured');
     const body = await readJson(req, 20_000_000);
-    return json({ text: await askClaude(env, body.input, body.images) });
+    const text = env.ANTHROPIC_API_KEY ? await askClaude(env, body.input, body.images) : await askWorkersAI(env, body.input, body.images);
+    return json({ text });
   }
 
   const col = parts[0], rule = COLS[col];
@@ -197,4 +198,23 @@ async function askClaude(env, input, images) {
   if (!r.ok) throw new HttpError(502, 'AI error ' + r.status);
   const out = await r.json();
   return (out.content || []).filter(b => b.type === 'text').map(b => b.text).join('');
+}
+
+/* ---------- 무료 AI: Cloudflare Workers AI (ANTHROPIC_API_KEY 가 없을 때) ---------- */
+async function askWorkersAI(env, input, images) {
+  const text = typeof input === 'string' ? input : Array.isArray(input) ? input.filter(m => m && m.role === 'user').map(m => String(m.content)).join('\n\n') : '';
+  if (!text) throw new HttpError(400, 'input required');
+  const imgs = (Array.isArray(images) ? images : []).slice(0, 4)
+    .filter(i => i && /^image\/(jpeg|png|webp)$/.test(i.media_type) && typeof i.data === 'string')
+    .map(i => ({ type: 'image_url', image_url: { url: `data:${i.media_type};base64,${i.data}` } }));
+  const model = env.WORKERS_AI_MODEL || '@cf/meta/llama-4-scout-17b-16e-instruct';
+  const messages = [
+    { role: 'system', content: 'You are a careful assistant for a Korean construction company. Follow the output format exactly. When asked for JSON, reply with JSON only.' },
+    { role: 'user', content: imgs.length ? [{ type: 'text', text }, ...imgs] : text }
+  ];
+  let out;
+  try { out = await env.AI.run(model, { messages, max_tokens: 8000, temperature: 0.1 }); }
+  catch (e) { const m = String(e && e.message || e); throw new HttpError(/limit|quota|429/i.test(m) ? 429 : 502, 'AI error: ' + m.slice(0, 200)); }
+  const r = out && out.response;
+  return typeof r === 'string' ? r : JSON.stringify(r ?? '');
 }
