@@ -99,6 +99,12 @@ function placeFTB(){
   let r = ftbEl.getBoundingClientRect(); const h = b.offsetHeight || 44;
   if (typeof cellSel !== 'undefined' && cellSel.length > 1 && cellSel.includes(ftbEl)) { const rs = cellSel.map(x => x.getBoundingClientRect()); r = {left: Math.min(...rs.map(x => x.left)), top: Math.min(...rs.map(x => x.top)), bottom: Math.max(...rs.map(x => x.bottom))}; }
   let top = r.bottom + 8; if (top + h > innerHeight - 8) top = Math.max(70, r.top - h - 8);
+  // 글자를 고른 경우: 고른 글자 바로 위에 (가리지 않게)
+  const sel = getSelection();
+  if (!ftbEl.closest('table.t') && sel.rangeCount && !sel.isCollapsed && ftbEl.contains(sel.anchorNode)) {
+    const sr = sel.getRangeAt(0).getBoundingClientRect();
+    if (sr.width || sr.height) { r = {left: sr.left, top: sr.top, bottom: sr.bottom}; top = sr.top - h - 8; if (top < 70) top = sr.bottom + 8; }
+  }
   b.style.top = top + 'px'; b.style.left = Math.max(8, Math.min(r.left, innerWidth - b.offsetWidth - 8)) + 'px';
 }
 function showFTB(el){ const b = $('#ftb'); if (!b || !canWrite || !editOn) return; ftbEl = el; const fz = $('#fsz'); if (fz && document.activeElement !== fz) fz.value = Math.round(parseFloat(getComputedStyle(el).fontSize) || 12); b.querySelectorAll('.tbl').forEach(g => g.hidden = !el.closest('table.t')); b.hidden = false; placeFTB(); }
@@ -234,7 +240,21 @@ function wireFTB(){
     fz.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); setSize(+fz.value, false); ftbEl?.focus(); } else if (e.key === 'Escape') { ftbEl?.focus(); } });
     fz.addEventListener('change', () => setSize(+fz.value, false));
   }
-  desk.addEventListener('focusin', e => { const ed = e.target.closest('[data-ed]'); if (ed) showFTB(ed); });
+  // 노션처럼: 서식 툴바는 글자를 고르거나(드래그) 표 칸에 있을 때만. 그냥 누른 줄에서는 안 띄워서 아래 내용을 가리지 않게
+  desk.addEventListener('focusin', e => { const ed = e.target.closest('[data-ed]'); if (ed && ed.closest('table.t')) showFTB(ed); else if (ed && ftbEl !== ed) hideFTB(); });
+  if (!window.__ftbSel) {
+    window.__ftbSel = true;
+    document.addEventListener('selectionchange', () => {
+      const bar = $('#ftb'); if (!bar || !editOn || !canWrite) return;
+      if (bar.contains(document.activeElement) || [...bar.querySelectorAll('.pp')].some(p => !p.hidden)) return; // 툴바를 쓰는 중
+      if ($('#bm') && !$('#bm').hidden) { if (!bar.hidden) hideFTB(); return; } // 블록 메뉴가 열려 있으면 숨김
+      const s = getSelection(); if (!s.rangeCount) return; const n = s.anchorNode; const ed = (n && (n.nodeType === 1 ? n : n.parentElement))?.closest('#desk [data-ed]');
+      if (!ed) return;
+      if (ed.closest('table.t')) { if (ftbEl !== ed) showFTB(ed); return; }
+      if (!s.isCollapsed && s.toString().trim()) { if (ftbEl !== ed || bar.hidden) showFTB(ed); else placeFTB(); }
+      else if (!bar.hidden) hideFTB();
+    });
+  }
   desk.addEventListener('focusout', () => setTimeout(() => { const a = document.activeElement; if (!(a && a.closest && (a.closest('#desk [data-ed]') || a.closest('#ftb'))) && !b.matches(':hover')) hideFTB(); }, 120));
   window.addEventListener('scroll', () => { if (ftbEl) placeFTB(); }, {passive: true});
   window.addEventListener('resize', () => { if (ftbEl) placeFTB(); });
@@ -376,6 +396,7 @@ function setSize(px, keepSel){
 let ibSec = null;
 function hideIB(){ const b = $('#ib'); if (b) b.hidden = true; ibSec = null; }
 function wireIB(){
+  return; // 노션식 블록 메뉴(+ 버튼 · "/" · 빈 곳 클릭 새 줄)로 대체 — 두 가지 넣기 메뉴가 겹쳐 뜨지 않게
   const ib = $('#ib'), desk = $('#desk'); if (!ib || !desk) return;
   desk.addEventListener('click', e => {
     if (!canWrite || !editOn) return;

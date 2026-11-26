@@ -711,7 +711,7 @@ function bmOpen(line, anchorRect, q, slash){
     m.querySelector('.bm-q').addEventListener('input', e => { if (!bmCtx || bmCtx.slash) return; bmCtx.q = e.target.value; bmIdx = 0; bmRender(true); });
   }
   const fresh = !bmCtx || bmCtx.line !== line; bmCtx = {line, q, slash}; if (fresh) bmIdx = 0;
-  bmRender(); m.hidden = false;
+  bmRender(); m.hidden = false; if (typeof hideFTB === 'function') hideFTB();
   let top = anchorRect.bottom + 4; if (top + m.offsetHeight > innerHeight - 8) top = Math.max(8, anchorRect.top - m.offsetHeight - 4);
   m.style.top = top + 'px'; m.style.left = Math.max(8, Math.min(anchorRect.left, innerWidth - m.offsetWidth - 8)) + 'px';
   if (!slash && fresh) setTimeout(() => m.querySelector('.bm-q').focus(), 0);
@@ -764,8 +764,14 @@ function wireBm(desk){
   desk.addEventListener('mouseleave', () => { plusTimer = setTimeout(() => { if (!bmCtx) plus.hidden = true; }, 250); });
   // 조항 빈 곳(내용 칸 아래 여백 등)을 누르면 맨 끝에 새 줄
   desk.addEventListener('click', e => {
-    if (!editOn || !canWrite || e.target.closest('[data-ed], button, table, .fld')) return;
-    const sec = e.target.closest('section.art'); if (!sec) return;
+    if (!editOn || !canWrite || e.target.closest('[data-ed], button, table, .fld, header')) return;
+    let sec = e.target.closest('section.art');
+    if (!sec) { // 조항 아래 빈 종이를 눌렀으면 바로 위 조항 끝에 이어 쓰기 (서명란·쪽 번호 쪽은 제외)
+      const pg = e.target.closest('.pg'); if (!pg) return;
+      const sig = [...pg.children].find(ch => ch.tagName === 'DIV' && ch.querySelectorAll('table').length >= 2);
+      if (sig && e.clientY >= sig.getBoundingClientRect().top - 4) return;
+      sec = [...pg.querySelectorAll(':scope > section.art')].filter(s => s.getBoundingClientRect().top < e.clientY).pop(); if (!sec) return;
+    }
     const body = secBody(sec), last = body.lastElementChild;
     if (last && last.tagName === 'P' && MARK_ONLY.test(last.textContent)) { last.focus(); phUpdate(); return; }
     flushPend(); const p = blankLine(); body.appendChild(p); pushHist(); markDirty(); p.focus(); phUpdate();
