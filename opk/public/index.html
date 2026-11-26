@@ -393,7 +393,7 @@ body.viewing :is(#ct,#exp) [data-ed]{outline:none}
 :is(#ct,#exp) .bplus[hidden]{display:none}
 :is(#ct,#exp) .bplus:hover{background:rgba(0,0,0,.06);color:#333}
 :is(#ct,#exp) .bplus svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
-:is(#ct,#exp) .bm{position:fixed;z-index:42;width:264px;max-height:340px;overflow:auto;padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 28px var(--shs,rgba(0,0,0,.16));font-family:"Pretendard",sans-serif;color:var(--ink)}
+:is(#ct,#exp) .bm{position:fixed;z-index:42;width:280px;max-height:400px;display:flex;flex-direction:column;overflow:hidden;padding:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 28px var(--shs,rgba(0,0,0,.16));font-family:"Pretendard",sans-serif;color:var(--ink)}
 :is(#ct,#exp) .bm[hidden]{display:none}
 :is(#ct,#exp) .bm-h{padding:6px 8px 4px;font-size:11px;font-weight:600;color:var(--mute)}
 :is(#ct,#exp) .bm-i{display:flex;align-items:center;gap:10px;width:100%;padding:6px 8px;border:0;border-radius:8px;background:transparent;color:var(--ink);text-align:left;cursor:pointer;font-family:inherit;transition:background-color .12s}
@@ -405,6 +405,20 @@ body.viewing :is(#ct,#exp) [data-ed]{outline:none}
 :is(#ct,#exp) .bm-t b{font-size:13px;font-weight:600}
 :is(#ct,#exp) .bm-t small{font-size:11px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 :is(#ct,#exp) .bm-none{margin:6px 8px;font-size:12px;color:var(--mute)}
+:is(#ct,#exp) .bm-s{display:flex;align-items:center;gap:8px;margin:8px 8px 4px;padding:0 10px;height:34px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);transition:border-color .15s}
+:is(#ct,#exp) .bm-s:focus-within{border-color:var(--green)}
+:is(#ct,#exp) .bm-s svg{width:15px;height:15px;flex:none;fill:none;stroke:var(--mute);stroke-width:1.7;stroke-linecap:round}
+:is(#ct,#exp) .bm-q{flex:1;min-width:0;height:100%;border:0;background:transparent;color:var(--ink);font:500 13px "Pretendard",sans-serif;outline:none}
+:is(#ct,#exp) .bm-q::placeholder{color:var(--mute);opacity:.8}
+:is(#ct,#exp) .bm-list{overflow:auto;padding:0 6px 6px}
+:is(#ct,#exp) .bm-g{margin:6px 2px 2px;padding:8px 8px 2px;border-top:1px solid var(--line);font-size:11px;font-weight:600;color:var(--mute)}
+:is(#ct,#exp) .bm-g:first-child{border-top:0;margin-top:0;padding-top:4px}
+:is(#ct,#exp) .bm-foot{padding:7px 12px;border-top:1px solid var(--line);font-size:11px;color:var(--mute);background:var(--panel)}
+:is(#ct,#exp) .ph::before{content:attr(data-ph);color:#b4b8bd;pointer-events:none}
+:is(#ct,#exp) .ph.ph-m::before{content:none}
+:is(#ct,#exp) .ph.ph-m::after{content:attr(data-ph);color:#b4b8bd;pointer-events:none}
+:is(#ct,#exp) .art{cursor:text}
+:is(#ct,#exp) .art>h2{cursor:default}
 
 #sg :focus-visible{outline:2px solid var(--green);outline-offset:2px}
 #sg .bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px max(3vw,16px);background:var(--barbg);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
@@ -709,7 +723,7 @@ function markEditable(root){
     if (['TABLE','TBODY','THEAD','TR','SECTION','HEADER','COLGROUP','COL','BR','IMG'].includes(el.tagName)) return;
     const direct = [...el.childNodes].some(n => (n.nodeType === 3 && n.textContent.trim()) || (n.nodeType === 1 && n.classList.contains('fld')));
     const hasBlock = el.querySelector(BLOCK);
-    const emptyCell = (el.tagName === 'TD' || el.tagName === 'TH') && !el.textContent.trim() && !el.querySelector(BLOCK);
+    const emptyCell = (el.tagName === 'TD' || el.tagName === 'TH' || (el.tagName === 'P' && !el.closest('header'))) && !el.textContent.trim() && !el.querySelector(BLOCK);
     if ((direct || emptyCell) && !hasBlock) { el.setAttribute('contenteditable', 'true'); el.setAttribute('data-ed', ''); el.spellcheck = false; }
   });
   root.querySelectorAll('.fld').forEach(f => { f.setAttribute('contenteditable', 'false'); f.removeAttribute('style'); });
@@ -719,7 +733,8 @@ function cleanHTML(pg){
   c.querySelectorAll('[data-ed]').forEach(el => { el.removeAttribute('contenteditable'); el.removeAttribute('data-ed'); el.removeAttribute('spellcheck'); });
   c.querySelectorAll('.cell-on').forEach(el => el.classList.remove('cell-on'));
   c.querySelectorAll('.fld').forEach(el => { el.removeAttribute('contenteditable'); el.classList.remove('fld-hi'); });
-  c.querySelectorAll('.blk, .cell-sel, .slot-hi').forEach(el => { el.classList.remove('blk', 'cell-sel', 'slot-hi'); if (!el.className) el.removeAttribute('class'); });
+  c.querySelectorAll('[data-ph]').forEach(el => el.removeAttribute('data-ph'));
+  c.querySelectorAll('.blk, .cell-sel, .slot-hi, .ph').forEach(el => { el.classList.remove('blk', 'cell-sel', 'slot-hi', 'ph', 'ph-m'); if (!el.className) el.removeAttribute('class'); });
   c.style.transform = '';
   return sanitizePage(c.outerHTML);
 }
@@ -941,7 +956,7 @@ function splitPara(p){
   if (!p.textContent.length) p.appendChild(document.createElement('br'));
   p.after(np);
   if (m || c) renum(p.parentNode);
-  const tn = np.firstChild; const rr = document.createRange(); rr.setStart(tn, prefix.length); rr.collapse(true); s.removeAllRanges(); s.addRange(rr); np.focus();
+  const tn = np.firstChild; const rr = document.createRange(); rr.setStart(tn, prefix.length); rr.collapse(true); s.removeAllRanges(); s.addRange(rr); np.focus(); if (typeof phUpdate === 'function') phUpdate();
   pushHist(); markDirty(); refreshThumbs();
 }
 function joinPrev(p){
@@ -1162,72 +1177,106 @@ function sideToggle(force){
 if (!window.__sideWired) { window.__sideWired = true; document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#sideTg')) sideToggle(); }); }
 
 
-/* ---- 노션처럼 블록 넣기: 줄 왼쪽 + 버튼, 또는 빈 줄에서 "/" ---- */
+/* ---- 노션처럼 블록 넣기: 줄 왼쪽 + 버튼, 빈 줄에서 "/", 조항 빈 곳 클릭 → 새 줄 ---- */
+const BM_GROUPS = [['기본', ['text']], ['목록', ['num', 'circ', 'bul']], ['구조', ['kv', 'table']], ['강조', ['amount', 'note']], ['조항', ['sec']]];
 const BM_ITEMS = [
   ['text', '텍스트', '보통 문단', '텍스트 글 문단 text', 'M4 6h12M4 10h12M4 14h8', () => '<p>내용</p>'],
   ['num', '번호 목록', '1. 2. 3.', '번호 숫자 목록 1 list', 'M8 6h9M8 10h9M8 14h9M3.5 5.5h1v2M3 9.5h2l-2 2h2', () => '<div><p class="li">1. 내용</p></div>'],
-  ['circ', '원문자 목록', '① ② ③', '원문자 동그라미 번호 ①', 'M9 6h8M9 10h8M9 14h8', () => '<div><p class="li">① 내용</p></div>', '①'],
-  ['bul', '말머리표 목록', '● 항목', '말머리 글머리 점 bullet •', 'M8 6h9M8 10h9M8 14h9', () => '<div><p class="li">• 내용</p></div>', '•'],
+  ['circ', '원문자 목록', '① ② ③', '원문자 동그라미 번호 ①', '', () => '<div><p class="li">① 내용</p></div>', '①'],
+  ['bul', '말머리표 목록', '• 항목', '말머리 글머리 점 bullet •', '', () => '<div><p class="li">• 내용</p></div>', '•'],
   ['kv', '2단 (항목 · 내용)', '왼쪽 항목, 오른쪽 내용 — 공사내용처럼', '2단 두단 항목 내용 kv 공사내용', 'M3 5h4M3 10h4M3 15h4M10 5h7M10 10h7M10 15h5', () => blockHTML({type: 'kv', rows: [['항목', '내용'], ['항목', '내용']]})],
   ['table', '표', '3줄 표', '표 테이블 table', 'M3 4h14v12H3zM3 8h14M3 12h14M8 4v12', () => newTable().outerHTML],
   ['amount', '금액 박스', '총 공사금액 — 기본정보와 연결', '금액 돈 공사금액 amount', 'M3 6h14v8H3zM10 8.5v3M8.5 9.5h3', () => blockHTML({type: 'amount', label: '총 공사금액', value: '금 0원', note: '(일금 영 원정 · 부가세 포함)'})],
   ['note', '안내 박스', '초록 배경으로 강조한 문단', '안내 강조 박스 note', 'M4 4h12v12H4zM7 8h6M7 11h4', () => blockHTML({type: 'note', text: '안내 문구'})],
   ['sec', '새 조항', '이 조항 아래에 제N조 하나 더', '조항 조 섹션 section', 'M4 5h12M4 10h12M4 15h7M14 13v4M12 15h4', null]
 ];
+const BM_HINT = '‘/’ 를 누르면 블록 메뉴';
 let bmCtx = null, bmIdx = 0, plusLine = null, plusTimer = null;
-function bmTop(line){
-  let el = line;
-  while (el.parentElement) {
-    const p = el.parentElement;
-    if (p.matches('section.art, .pg')) return el;
-    if (p.tagName === 'DIV' && !p.classList.contains('kv') && getComputedStyle(p).flexDirection === 'column' && p.children.length > 1) return el;
-    el = p;
+const isBox = el => el.tagName !== 'DIV' || el.classList.contains('kv') || /background/.test(el.getAttribute('style') || '');
+/* 조항의 내용 칸(오른쪽 열). 블록이 하나뿐이면 묶음 div 로 감싸서 여러 블록이 같은 칸에 쌓이게 */
+function secBody(sec){
+  let body = [...sec.children].find(c => c.tagName !== 'H2');
+  if (!body) { body = document.createElement('div'); sec.appendChild(body); }
+  if (isBox(body)) { const w = document.createElement('div'); w.setAttribute('style', 'display: flex; flex-direction: column; gap: 6px'); body.replaceWith(w); w.appendChild(body); body = w; }
+  [...sec.children].filter(c => c.tagName !== 'H2' && c !== body).forEach(c => body.appendChild(c)); // 칸 밖으로 빠진 블록은 안으로
+  return body;
+}
+/* 새 블록 놓을 자리: {parent, after} */
+function bmSpot(line){
+  const sec = line.closest('section.art');
+  if (sec) {
+    const body = secBody(sec);
+    if (!body.contains(line)) return {parent: body, after: null, first: true};  // 제목 줄에서 → 내용 맨 앞
+    let el = line; while (el.parentElement !== body) el = el.parentElement;
+    return {parent: body, after: el};
   }
-  return line;
+  const pg = line.closest('.pg'); let el = line; while (el.parentElement && el.parentElement !== pg) el = el.parentElement;
+  return {parent: pg, after: el};
 }
-function bmList(){ const q = (bmCtx?.q || '').trim(); return BM_ITEMS.filter(it => !q || (it[1] + ' ' + it[3]).toLowerCase().includes(q.toLowerCase())); }
-function bmRender(){
+function bmPlace(el, spot){ if (spot.first) spot.parent.prepend(el); else spot.after.after(el); }
+/* 빈 줄 하나 만들기 (조항 빈 곳 클릭 / 텍스트 블록) */
+function blankLine(){ const p = document.createElement('p'); p.appendChild(document.createElement('br')); p.setAttribute('contenteditable', 'true'); p.setAttribute('data-ed', ''); p.spellcheck = false; return p; }
+function bmList(){
+  const q = (bmCtx?.q || '').trim().toLowerCase();
+  return BM_GROUPS.flatMap(([g, ids]) => ids.map(id => BM_ITEMS.find(x => x[0] === id)).filter(it => !q || (it[1] + ' ' + it[3]).toLowerCase().includes(q)).map(it => ({g, it})));
+}
+function bmRender(keepInput){
   const m = $('#bm'); if (!m || !bmCtx) return; const list = bmList(); if (bmIdx >= list.length) bmIdx = Math.max(0, list.length - 1);
-  m.innerHTML = `<div class="bm-h">${bmCtx.q != null ? `/${esc(bmCtx.q)}` : '블록 넣기'}</div>` + (list.length ? list.map((it, i) => `<button type="button" class="bm-i${i === bmIdx ? ' on' : ''}" data-b="${it[0]}" role="option" aria-selected="${i === bmIdx}"><span class="bm-ic">${it[6] ? `<b>${it[6]}</b>` : `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="${it[4]}"/></svg>`}</span><span class="bm-t"><b>${it[1]}</b><small>${it[2]}</small></span></button>`).join('') : '<p class="bm-none">맞는 블록이 없어요</p>');
-  m.querySelector('.on')?.scrollIntoView({block: 'nearest'});
+  const inp = m.querySelector('.bm-q');
+  if (!keepInput) { inp.value = bmCtx.slash ? '/' + (bmCtx.q || '') : (bmCtx.q || ''); inp.readOnly = !!bmCtx.slash; }
+  let html = '', lastG = null;
+  list.forEach(({g, it}, i) => {
+    if (g !== lastG) { html += `<div class="bm-g">${g}</div>`; lastG = g; }
+    html += `<button type="button" class="bm-i${i === bmIdx ? ' on' : ''}" data-b="${it[0]}" role="option" aria-selected="${i === bmIdx}"><span class="bm-ic">${it[6] ? `<b>${it[6]}</b>` : `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="${it[4]}"/></svg>`}</span><span class="bm-t"><b>${it[1]}</b><small>${it[2]}</small></span></button>`;
+  });
+  m.querySelector('.bm-list').innerHTML = html || '<p class="bm-none">맞는 블록이 없어요</p>';
+  m.querySelector('.bm-i.on')?.scrollIntoView({block: 'nearest'});
 }
-function bmOpen(line, anchorRect, q){
+function bmOpen(line, anchorRect, q, slash){
   let m = $('#bm');
   if (!m) {
-    m = document.createElement('div'); m.id = 'bm'; m.className = 'bm'; m.setAttribute('role', 'listbox'); m.setAttribute('aria-label', '블록 넣기');
+    m = document.createElement('div'); m.id = 'bm'; m.className = 'bm'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-label', '블록 넣기');
+    m.innerHTML = '<label class="bm-s"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="9" cy="9" r="5.5"/><path d="m13.2 13.2 3.3 3.3"/></svg><input class="bm-q" placeholder="블록 찾기 (예: 표, 금액, 2단)" aria-label="블록 찾기" autocomplete="off"></label><div class="bm-list" role="listbox"></div><div class="bm-foot">↑↓ 고르기 · Enter 넣기 · Esc 닫기</div>';
     ($('#ftb')?.parentElement || document.body).appendChild(m);
-    m.addEventListener('mousedown', e => e.preventDefault());
+    m.addEventListener('mousedown', e => { if (!e.target.closest('.bm-q')) e.preventDefault(); });
     m.addEventListener('click', e => { const b = e.target.closest('[data-b]'); if (b) bmChoose(b.dataset.b); });
-    m.addEventListener('mousemove', e => { const b = e.target.closest('[data-b]'); if (!b) return; const i = bmList().findIndex(x => x[0] === b.dataset.b); if (i !== bmIdx) { bmIdx = i; m.querySelectorAll('.bm-i').forEach((x, j) => x.classList.toggle('on', j === i)); } });
+    m.addEventListener('mousemove', e => { const b = e.target.closest('[data-b]'); if (!b) return; const i = bmList().findIndex(x => x.it[0] === b.dataset.b); if (i !== bmIdx) { bmIdx = i; m.querySelectorAll('.bm-i').forEach((x, j) => x.classList.toggle('on', j === i)); } });
+    m.querySelector('.bm-q').addEventListener('input', e => { if (!bmCtx || bmCtx.slash) return; bmCtx.q = e.target.value; bmIdx = 0; bmRender(true); });
   }
-  const fresh = !bmCtx || bmCtx.line !== line; bmCtx = {line, q}; if (fresh) bmIdx = 0;
+  const fresh = !bmCtx || bmCtx.line !== line; bmCtx = {line, q, slash}; if (fresh) bmIdx = 0;
   bmRender(); m.hidden = false;
   let top = anchorRect.bottom + 4; if (top + m.offsetHeight > innerHeight - 8) top = Math.max(8, anchorRect.top - m.offsetHeight - 4);
   m.style.top = top + 'px'; m.style.left = Math.max(8, Math.min(anchorRect.left, innerWidth - m.offsetWidth - 8)) + 'px';
+  if (!slash && fresh) setTimeout(() => m.querySelector('.bm-q').focus(), 0);
 }
 function bmClose(){ const m = $('#bm'); if (m) m.hidden = true; bmCtx = null; }
 function bmChoose(key){
-  if (!bmCtx) return; const {line, q} = bmCtx; bmClose(); if (!line || !line.isConnected) return;
+  if (!bmCtx) return; const {line, slash} = bmCtx; bmClose(); if (!line || !line.isConnected) return;
   const it = BM_ITEMS.find(x => x[0] === key); if (!it) return;
-  // "/표" 처럼 친 글자는 지우고, 그 줄이 비면 그 자리에 블록
-  if (q != null) { const t = firstText(line); if (t) t.textContent = t.textContent.replace(/\/[^\s/]*\s*$/, ''); }
+  // "/표" 처럼 친 글자는 지우고, 그 줄이 비면(번호만 남아도) 그 자리를 블록으로
+  if (slash) { const t = firstText(line); if (t) t.textContent = t.textContent.replace(/\/[^\s/]*\s*$/, ''); }
   const emptyLine = line.tagName === 'P' && MARK_ONLY.test(line.textContent);
   if (key === 'sec') {
     const sec = line.closest('section.art') || [...ROOT.querySelectorAll('#desk section.art')].pop(); if (!sec) return; let ns;
-    structOp(() => { ns = emptySection(sec); sec.after(ns); if (emptyLine && line.closest('section.art') && line.parentElement.children.length > 1) line.remove(); }, '새 조항을 넣었어요.');
+    structOp(() => { ns = emptySection(sec); sec.after(ns); if (emptyLine && line.closest('section.art') && secBody(sec).children.length > 1) line.remove(); }, '새 조항을 넣었어요.');
     if (ns) bmFocus(ns.querySelector('h2 .tt') || ns.querySelector('h2')); return;
   }
   let el = null;
   structOp(() => {
     const w = document.createElement('div'); w.innerHTML = it[5](); el = w.firstElementChild; if (!el) return false;
-    const top = bmTop(line);
-    if (emptyLine && top === line) line.replaceWith(el); else { top.after(el); if (emptyLine) line.remove(); }
+    const spot = bmSpot(line);
+    bmPlace(el, spot);
+    if (emptyLine) { const box = line.parentElement; line.remove(); if (box && box !== spot.parent && box.tagName === 'DIV' && !box.children.length) box.remove(); }
   }, `${it[1]}를 넣었어요.`);
   if (el) bmFocus(el.matches('[data-ed]') ? el : el.querySelector('[data-ed]'));
 }
 function bmFocus(f){ if (!f) return; f.focus(); const r = document.createRange(); r.selectNodeContents(f); const s = getSelection(); s.removeAllRanges(); s.addRange(r); f.scrollIntoView({block: 'nearest', behavior: 'smooth'}); }
+/* 빈 줄 안내: 커서가 있는 빈 줄에 흐린 글씨 */
+function phUpdate(){
+  ROOT.querySelectorAll('#desk .ph').forEach(p => { if (p !== document.activeElement || !MARK_ONLY.test(p.textContent)) p.classList.remove('ph', 'ph-m'); });
+  const a = document.activeElement; if (a && a.matches && a.matches('#desk p[data-ed]') && !a.closest('td,th') && MARK_ONLY.test(a.textContent)) { a.classList.add('ph'); a.classList.toggle('ph-m', !!a.textContent.trim()); a.dataset.ph = BM_HINT; }
+}
 function wireBm(desk){
-  // + 버튼: 줄에 마우스를 올리면 왼쪽에
   let plus = $('#bplus');
   if (!plus) {
     plus = document.createElement('button'); plus.type = 'button'; plus.id = 'bplus'; plus.className = 'bplus'; plus.hidden = true;
@@ -1235,7 +1284,7 @@ function wireBm(desk){
     plus.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>';
     ($('#ftb')?.parentElement || document.body).appendChild(plus);
     plus.addEventListener('mousedown', e => e.preventDefault());
-    plus.addEventListener('click', () => { if (!plusLine) return; const r = plus.getBoundingClientRect(); bmOpen(plusLine, r, null); });
+    plus.addEventListener('click', () => { if (!plusLine) return; const r = plus.getBoundingClientRect(); bmOpen(plusLine, r, '', false); });
     plus.addEventListener('mouseenter', () => clearTimeout(plusTimer));
   }
   desk.addEventListener('mousemove', e => {
@@ -1246,19 +1295,28 @@ function wireBm(desk){
     plus.style.top = (r.top + Math.min(r.height, 22) / 2 - 11) + 'px'; plus.style.left = Math.max(4, (pg ? pg.left + 14 : r.left - 28)) + 'px'; plus.hidden = false;
   });
   desk.addEventListener('mouseleave', () => { plusTimer = setTimeout(() => { if (!bmCtx) plus.hidden = true; }, 250); });
+  // 조항 빈 곳(내용 칸 아래 여백 등)을 누르면 맨 끝에 새 줄
+  desk.addEventListener('click', e => {
+    if (!editOn || !canWrite || e.target.closest('[data-ed], button, table, .fld')) return;
+    const sec = e.target.closest('section.art'); if (!sec) return;
+    const body = secBody(sec), last = body.lastElementChild;
+    if (last && last.tagName === 'P' && MARK_ONLY.test(last.textContent)) { last.focus(); phUpdate(); return; }
+    flushPend(); const p = blankLine(); body.appendChild(p); pushHist(); markDirty(); p.focus(); phUpdate();
+  });
+  desk.addEventListener('focusin', phUpdate); desk.addEventListener('focusout', () => setTimeout(phUpdate, 0)); desk.addEventListener('input', phUpdate);
   // 빈 줄에서 / 치면 메뉴, 뒤에 글자를 치면 거르기
   desk.addEventListener('input', () => {
     const s = getSelection(); if (!s.rangeCount) return; const n = s.getRangeAt(0).startContainer; const line = (n.nodeType === 1 ? n : n.parentElement)?.closest('[data-ed]');
     const m = line && line.tagName === 'P' && line.textContent.match(/^\s*(?:\d+\.|[①-⑳]|[•·\-●○■□◦▪※])?\s*\/([^\s/]{0,12})$/);
-    if (m) { const r = s.getRangeAt(0).getBoundingClientRect(); bmOpen(line, r.width || r.height ? r : line.getBoundingClientRect(), m[1]); }
-    else if (bmCtx && bmCtx.q != null) bmClose();
+    if (m) { const r = s.getRangeAt(0).getBoundingClientRect(); bmOpen(line, r.width || r.height ? r : line.getBoundingClientRect(), m[1], true); }
+    else if (bmCtx && bmCtx.slash) bmClose();
   });
   if (window.__bmWired) return; window.__bmWired = true;
   document.addEventListener('keydown', e => {
     if (!bmCtx || $('#bm')?.hidden) return; const list = bmList();
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); bmIdx = (bmIdx + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % Math.max(1, list.length); bmRender(); }
-    else if (e.key === 'Enter' && !e.isComposing) { if (!list.length) return; e.preventDefault(); e.stopPropagation(); bmChoose(list[bmIdx][0]); }
-    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); bmClose(); }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); bmIdx = (bmIdx + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % Math.max(1, list.length); bmRender(true); }
+    else if (e.key === 'Enter' && !e.isComposing) { if (!list.length) return; e.preventDefault(); e.stopPropagation(); bmChoose(list[bmIdx].it[0]); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); const l = bmCtx.line; bmClose(); if (l && l.isConnected) l.focus(); }
   }, true);
   document.addEventListener('mousedown', e => { if (bmCtx && !e.target.closest('#bm') && !e.target.closest('#bplus')) bmClose(); }, true);
 }
