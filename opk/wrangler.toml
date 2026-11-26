@@ -1,0 +1,22 @@
+# OPK 업무 도구 — 홈페이지(opk-korea-main)와 완전히 분리된 별도 Worker / D1 입니다.
+name = "opk-tools"
+main = "src/worker.js"
+compatibility_date = "2025-06-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "opk-tools"
+database_id = "REPLACE_WITH_D1_ID"   # npx wrangler d1 create opk-tools 결과의 database_id
+
+[vars]
+# Cloudflare Zero Trust → Access 애플리케이션 정보 (README 5단계)
+ACCESS_TEAM_DOMAIN = ""   # 예: opk.cloudflareaccess.com
+ACCESS_AUD = ""           # Access 애플리케이션의 Application Audience (AUD) Tag
+# 계약서를 보고 고칠 수 있는 관리자 메일 (쉼표로 구분)
+ADMIN_EMAILS = ""
+# AI 번역에 쓸 모델 (ANTHROPIC_API_KEY 는 secret 으로 따로 넣기)
+ANTHROPIC_MODEL = "claude-sonnet-4-5"

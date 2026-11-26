@@ -1,0 +1,15 @@
+{
+  "name": "opk-tools",
+  "private": true,
+  "version": "1.0.0",
+  "description": "OPK 업무 도구 — 계약서 편집기와 메일 서명 편집기 (Cloudflare Workers + D1)",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute opk-tools --remote --file=schema.sql",
+    "db:init:local": "wrangler d1 execute opk-tools --local --file=schema.sql"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
