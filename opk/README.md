@@ -29,14 +29,14 @@ wrangler.toml      Worker 설정
 | 메일 서명 (`signatures`) | 로그인한 직원 모두 | 관리자 |
 | 회사 공통 정보 (`settings`) | 로그인한 직원 모두 | 관리자 |
 
-로그인은 두 가지 중 하나로 합니다.
+로그인은 **아이디·비밀번호 하나**로 합니다.
 
-- **비밀번호 (기본)** — Worker 의 Secret 에 `ADMIN_PASSWORD`(관리자), `STAFF_PASSWORD`(직원)를 넣으면
-  첫 화면에 비밀번호 칸이 나옵니다. 로그인은 30일 유지되고, 비밀번호를 바꾸면 모두 다시 로그인해야 합니다.
-- **Cloudflare Access (선택)** — 회사 메일로 로그인시키려면 Zero Trust → Access 앱을 만들고
-  `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`, `ADMIN_EMAILS` 를 채웁니다. 이 값이 있으면 비밀번호 대신 Access 를 씁니다.
+- 아이디: `wrangler.toml` 의 `LOGIN_ID` (지금 `opkvitooladmin`)
+- 비밀번호: Worker 설정 → 변수 및 시크릿 → `LOGIN_PASSWORD` (유형 **Secret**). 저장소에는 절대 적지 않습니다.
+- 로그인한 사람은 모두 관리자입니다(계약서·서명 모두 편집). 로그인은 30일 유지되고, 비밀번호를 바꾸면 모두 다시 로그인합니다.
+- (선택) 직원용 보기 전용 계정이 필요하면 `STAFF_PASSWORD` 를 추가하면 비밀번호만으로 서명 보기·복사 전용으로 들어옵니다.
 
-둘 다 없으면 화면에 "로그인 설정이 필요해요"만 나오고 데이터는 열리지 않습니다.
+비밀번호가 없으면 화면에 "로그인 설정이 필요해요"만 나오고 데이터는 열리지 않습니다.
 
 ## 배포 (Cloudflare 대시보드, Git 연결)
 
@@ -45,7 +45,7 @@ wrangler.toml      Worker 설정
 2. **Worker 만들기** — Workers & Pages → 애플리케이션 생성 → Git 저장소 가져오기 → `dasomkim-create/opk`, 프로젝트 이름 `opk-vitools`
    - Root directory: `opk` (저장소 안 `opk/` 폴더)
    - Deploy command: `npx wrangler deploy`
-3. **Secret 넣기** — 만든 Worker → 설정 → 변수 및 비밀 → `ADMIN_PASSWORD`, `STAFF_PASSWORD`
+3. **Secret 넣기** — 만든 Worker → 설정 → 변수 및 비밀 → `LOGIN_PASSWORD`
    (AI 번역·사진으로 만들기를 쓰려면 `ANTHROPIC_API_KEY` 도)
 4. 이후 `main` 에 커밋하면 자동으로 다시 배포됩니다.
 
@@ -54,12 +54,11 @@ wrangler.toml      Worker 설정
 ```bash
 npm install && npx wrangler login
 npx wrangler d1 create opk-tools      # → database_id 를 wrangler.toml 에
-npx wrangler secret put ADMIN_PASSWORD
-npx wrangler secret put STAFF_PASSWORD
+npx wrangler secret put LOGIN_PASSWORD
 npm run deploy
 ```
 
-실제 데이터(기존 계약서·서명)를 옮길 때만 따로 받은 `seed.sql` 을 넣습니다. **git 에 올리지 마세요.**
+실제 데이터는 화면 왼쪽 아래 **백업** → 복사하기/가져오기로 옮기는 게 가장 쉽습니다. 명령줄로는 따로 받은 `seed.sql` 을 넣습니다. **git 에 올리지 마세요.**
 
 ```bash
 npx wrangler d1 execute opk-tools --remote --file=seed.sql
@@ -68,7 +67,7 @@ npx wrangler d1 execute opk-tools --remote --file=seed.sql
 ## 로컬에서 돌려보기
 
 ```bash
-printf 'ADMIN_PASSWORD=local-admin\nSTAFF_PASSWORD=local-staff\n' > .dev.vars
+printf 'LOGIN_PASSWORD=local-test\n' > .dev.vars   # 아이디 opkvitooladmin
 npm run db:init:local
 npm run dev     # http://127.0.0.1:8787
 ```

@@ -20,3 +20,5 @@ ACCESS_AUD = ""           # Access 애플리케이션의 Application Audience (A
 ADMIN_EMAILS = ""
 # AI 번역에 쓸 모델 (ANTHROPIC_API_KEY 는 secret 으로 따로 넣기)
 ANTHROPIC_MODEL = "claude-sonnet-4-5"
+# 로그인 아이디 (비밀번호는 Worker 설정 → 변수 및 시크릿 → LOGIN_PASSWORD 에 Secret 으로만 넣기)
+LOGIN_ID = "opkvitooladmin"
