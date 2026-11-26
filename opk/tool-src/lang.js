@@ -293,7 +293,7 @@ function blockHTML(b){
     const head = (b.head || []).length ? `<tr>${b.head.map(h => `<th class="c" style="padding: 3px 9px">${T(h)}</th>`).join('')}</tr>` : '';
     return `<table class="t" style="font-size: 12px">${head}${(b.rows || []).map(r => `<tr>${(r || []).map((c, i) => i === 0 ? `<th class="c" style="padding: 3px 9px; background: #ffffff">${T(c)}</th>` : `<td style="padding: 3px 9px">${T(c)}</td>`).join('')}</tr>`).join('')}</table>`;
   }
-  if (b.type === 'amount') return `<div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding: 5px 14px; background: #f5f5f5"><span style="font-weight: 600; color: #111111">${T(b.label || '총 공사금액')}</span><span style="font-size: 20px; line-height: 1.3; font-weight: 700; color: #111111">${T(b.value)}</span>${b.note ? `<span style="color: #555555">${T(b.note)}</span>` : ''}</div>`;
+  if (b.type === 'amount') return `<div style="display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px; padding: 5px 14px; background: #f5f5f5"><span style="font-weight: 600; color: #111111">${T(b.label || '총 공사금액')}</span><span class="amt" style="font-size: 20px; line-height: 1.3; font-weight: 700; color: #111111">${T(b.value)}</span>${b.note ? `<span style="color: #555555">${T(b.note)}</span>` : ''}</div>`;
   if (b.type === 'note') return `<div style="background: #eef5e7; padding: 10px 14px"><p>${T(b.text)}</p></div>`;
   return `<p>${T(b.text)}</p>`;
 }

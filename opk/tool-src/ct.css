@@ -213,3 +213,26 @@ input.fp-in[inputmode=numeric]{padding-right:18px}
 #fpb[aria-pressed=true]{border-color:var(--green);color:var(--green)}
 #fpb svg{margin-right:4px;vertical-align:-3px}
 @media(max-width:800px){.ed{grid-template-columns:minmax(0,1fr)}.ed>.side{grid-column:1;grid-row:1}.ed>.desk{grid-column:1;grid-row:2}.fp:not([hidden]){position:fixed;z-index:38;left:8px;right:8px;bottom:8px;top:auto;height:auto;max-height:55vh;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 28px var(--shs,rgba(0,0,0,.16))}.side-tg{display:none}}
+/* 기본정보: 제N조 위치 */
+.fp-locs{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end}
+.fp-loc{height:18px;padding:0 6px;border:0;border-radius:5px;background:var(--panel2);color:var(--mute);font:600 10px "Pretendard",sans-serif;cursor:pointer;transition:background-color .15s,color .15s}
+.fp-loc:hover{background:rgba(110,185,43,.16);color:var(--green)}
+.slot-hi{background-color:rgba(110,185,43,.25)!important;border-radius:3px}
+.fp-row label{gap:8px}
+/* 노션처럼 블록 넣기 */
+.bplus{position:fixed;z-index:31;width:22px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:#a3a7a2;display:grid;place-items:center;cursor:pointer;transition:background-color .15s,color .15s}
+.bplus[hidden]{display:none}
+.bplus:hover{background:rgba(0,0,0,.06);color:#333}
+.bplus svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
+.bm{position:fixed;z-index:42;width:264px;max-height:340px;overflow:auto;padding:6px;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 28px var(--shs,rgba(0,0,0,.16));font-family:"Pretendard",sans-serif;color:var(--ink)}
+.bm[hidden]{display:none}
+.bm-h{padding:6px 8px 4px;font-size:11px;font-weight:600;color:var(--mute)}
+.bm-i{display:flex;align-items:center;gap:10px;width:100%;padding:6px 8px;border:0;border-radius:8px;background:transparent;color:var(--ink);text-align:left;cursor:pointer;font-family:inherit;transition:background-color .12s}
+.bm-i.on{background:var(--panel2)}
+.bm-ic{width:30px;height:30px;flex:none;display:grid;place-items:center;border:1px solid var(--line);border-radius:7px;background:var(--panel)}
+.bm-ic svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.bm-ic b{font-size:14px;font-weight:600}
+.bm-t{display:flex;flex-direction:column;min-width:0}
+.bm-t b{font-size:13px;font-weight:600}
+.bm-t small{font-size:11px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bm-none{margin:6px 8px;font-size:12px;color:var(--mute)}

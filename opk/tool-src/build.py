@@ -171,6 +171,19 @@ body.navmin .main{margin-left:64px}
 #ct #ftb .lab{margin:0 4px 0 2px}
 #ct #ftb .ic.wide{width:auto;min-width:32px;padding:0 8px;gap:4px;display:inline-flex}
 #ct #ftb [data-t=merge],#ct #ftb [data-t=split]{padding:0 10px}
+@property --fw{syntax:'<length>';inherits:true;initial-value:0px}
+@property --sw{syntax:'<length>';inherits:true;initial-value:150px}
+#ct .ed{transition:--fw .32s cubic-bezier(.22,.8,.24,1),--sw .32s cubic-bezier(.22,.8,.24,1)}
+@keyframes opk-pop{from{opacity:0;transform:translateY(-6px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes opk-fade{from{opacity:0}to{opacity:1}}
+@keyframes opk-slide{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+#ct .cal:not([hidden]),#ct #ftb:not([hidden]),#ct #ftb .pp:not([hidden]),#ct #stb:not([hidden]),#ct #bm:not([hidden]),#ct .menu-list,#ct .findbar:not([hidden]){animation:opk-pop .18s cubic-bezier(.22,.8,.24,1)}
+#ct .fp:not([hidden]) .fp-list,#ct .fp:not([hidden]) .fp-help,#ct .ed .side>.tp,#ct .ed .side>.addpg{animation:opk-slide .28s cubic-bezier(.22,.8,.24,1)}
+#ct .fp.float:not([hidden]){animation:opk-pop .2s cubic-bezier(.22,.8,.24,1)}
+#ct .bplus:not([hidden]){animation:opk-fade .15s ease}
+#ct .fp-min svg,#ct .side-tg svg{transition:transform .28s cubic-bezier(.22,.8,.24,1)}
+#ct .blk,#ct .cell-sel,#ct .slot-hi{transition:background-color .15s ease}
+@media(prefers-reduced-motion:reduce){#ct .ed{transition:none}#ct *{animation:none!important}}
 #ct .ftb select{height:30px;border-radius:7px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);font:600 12px \"Pretendard\",sans-serif;padding:0 4px}
 #ct section.art>h2{cursor:pointer}
 .pg[data-lang=zh]{font-family:"PingFang SC","Microsoft YaHei","Noto Sans SC","Noto Sans CJK SC","Source Han Sans SC",sans-serif}

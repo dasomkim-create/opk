@@ -197,7 +197,7 @@ function cleanHTML(pg){
   c.querySelectorAll('[data-ed]').forEach(el => { el.removeAttribute('contenteditable'); el.removeAttribute('data-ed'); el.removeAttribute('spellcheck'); });
   c.querySelectorAll('.cell-on').forEach(el => el.classList.remove('cell-on'));
   c.querySelectorAll('.fld').forEach(el => { el.removeAttribute('contenteditable'); el.classList.remove('fld-hi'); });
-  c.querySelectorAll('.blk, .cell-sel').forEach(el => { el.classList.remove('blk', 'cell-sel'); if (!el.className) el.removeAttribute('class'); });
+  c.querySelectorAll('.blk, .cell-sel, .slot-hi').forEach(el => { el.classList.remove('blk', 'cell-sel', 'slot-hi'); if (!el.className) el.removeAttribute('class'); });
   c.style.transform = '';
   return sanitizePage(c.outerHTML);
 }
@@ -517,6 +517,7 @@ function findSlots(){
       if (/공사금액|계약금액/.test(t)) { const el = [...sec.querySelectorAll('span,p,strong,td')].find(x => !x.children.length && /금\s*[\d,]+\s*원/.test(x.textContent)); if (el) push(moneySlot(el, sec)); }
     });
   });
+  document.querySelectorAll('#desk .amt').forEach(el => { if (!S.some(x => x.el === el)) push(moneySlot(el, el.closest('section.art') || el.parentElement)); });
   // 예전에 넣은 칸(.fld)도 같은 항목으로
   document.querySelectorAll('#desk .fld').forEach(f => push(textSlot(f.dataset.k, f)));
   return S;
@@ -545,8 +546,15 @@ let fpTimer = null, fpSig = '', fpObs = null;
 const fpPref = (k, d) => { try { const v = localStorage.getItem('opk-fp-' + k); return v === null ? d : v; } catch { return d; } };
 const fpSave = (k, v) => { try { localStorage.setItem('opk-fp-' + k, v); } catch {} };
 const escA = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+function slotLoc(x){
+  const el = x.el; if (el.closest('header')) return '머리';
+  const sec = el.closest('section.art'); if (sec) { const no = sec.querySelector('h2 .no') || sec.querySelector('h2 span'); return no ? txtOf(no) : '조항'; }
+  const sig = [...(el.closest('.pg')?.children || [])].find(ch => ch.tagName === 'DIV' && ch.querySelectorAll('table').length >= 2 && ch.contains(el)); if (sig) return '서명란';
+  return el.tagName === 'P' && el.parentElement?.classList.contains('pg') ? '전문' : '본문';
+}
 function fpRow(key, s){
-  const lab = escA(fpLabel(key)), cnt = `<small>${s.length > 1 ? s.length + '곳' : ''}</small>`;
+  const lab = escA(fpLabel(key)), seen = new Map(); s.forEach((x, i) => { const l = slotLoc(x); if (!seen.has(l)) seen.set(l, i); });
+  const cnt = `<span class="fp-locs">${[...seen].map(([l, i]) => `<button type="button" class="fp-loc" data-k="${escA(key)}" data-i="${i}" title="계약서에서 보기">${escA(l)}</button>`).join('')}</span>`;
   if (s[0].type === 'date') { const d = s[0].get(); return `<div class="fp-row" data-k="${escA(key)}"><label><span>${lab}</span>${cnt}</label><button type="button" class="fp-in fp-date" data-k="${escA(key)}">${d ? fmtD(d, 'dot') : '<em>날짜 고르기</em>'}<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4"/></svg></button></div>`; }
   const v = s[0].get(), money = s[0].type === 'money';
   return `<div class="fp-row" data-k="${escA(key)}"><label><span>${lab}</span>${cnt}</label><input class="fp-in" data-k="${escA(key)}"${money ? ' inputmode="numeric"' : ''} value="${escA(v)}" aria-label="${lab}">${money ? '<i class="fp-unit">원</i>' : ''}</div>`;
@@ -597,6 +605,7 @@ function openFP(){
     p.addEventListener('click', e => {
       const d = e.target.closest('.fp-date');
       if (d) { const k = d.dataset.k, s = findSlots().find(x => x.key === k); openCal(null, {anchor: d, sel: s && s.get(), cb: dt => { setKey(k, dt); refreshFP(); toast(`${fpLabel(k)}: ${fmtD(dt, 'dot')} — 계약서 ${findSlots().filter(x => x.key === k).length}곳에 넣었어요.`); }}); return; }
+      const lc = e.target.closest('.fp-loc'); if (lc) { const x = findSlots().filter(y => y.key === lc.dataset.k)[+lc.dataset.i]; if (x) { x.el.scrollIntoView({block: 'center', behavior: 'smooth'}); x.el.classList.add('slot-hi'); setTimeout(() => x.el.classList.remove('slot-hi'), 1400); } return; }
       if (e.target.closest('.fp-x')) { closeFP(); fpSave('open', '0'); return; }
       if (e.target.closest('.fp-min')) { p.classList.toggle('min'); fpSave('min', p.classList.contains('min') ? '1' : '0'); fpPlace(); if (!p.classList.contains('min')) renderFP(); return; }
       if (e.target.closest('.fp-dock')) { p.classList.remove('float'); fpSave('float', '0'); fpPlace(); return; }
@@ -632,6 +641,108 @@ function sideToggle(force){
   const b = $('#sideTg'); if (b) { b.setAttribute('aria-expanded', String(!off)); b.title = off ? '쪽 목록 펴기' : '쪽 목록 접기'; }
 }
 if (!window.__sideWired) { window.__sideWired = true; document.addEventListener('click', e => { if (e.target.closest && e.target.closest('#sideTg')) sideToggle(); }); }
+
+
+/* ---- 노션처럼 블록 넣기: 줄 왼쪽 + 버튼, 또는 빈 줄에서 "/" ---- */
+const BM_ITEMS = [
+  ['text', '텍스트', '보통 문단', '텍스트 글 문단 text', 'M4 6h12M4 10h12M4 14h8', () => '<p>내용</p>'],
+  ['num', '번호 목록', '1. 2. 3.', '번호 숫자 목록 1 list', 'M8 6h9M8 10h9M8 14h9M3.5 5.5h1v2M3 9.5h2l-2 2h2', () => '<div><p class="li">1. 내용</p></div>'],
+  ['circ', '원문자 목록', '① ② ③', '원문자 동그라미 번호 ①', 'M9 6h8M9 10h8M9 14h8', () => '<div><p class="li">① 내용</p></div>', '①'],
+  ['bul', '말머리표 목록', '● 항목', '말머리 글머리 점 bullet •', 'M8 6h9M8 10h9M8 14h9', () => '<div><p class="li">• 내용</p></div>', '•'],
+  ['kv', '2단 (항목 · 내용)', '왼쪽 항목, 오른쪽 내용 — 공사내용처럼', '2단 두단 항목 내용 kv 공사내용', 'M3 5h4M3 10h4M3 15h4M10 5h7M10 10h7M10 15h5', () => blockHTML({type: 'kv', rows: [['항목', '내용'], ['항목', '내용']]})],
+  ['table', '표', '3줄 표', '표 테이블 table', 'M3 4h14v12H3zM3 8h14M3 12h14M8 4v12', () => newTable().outerHTML],
+  ['amount', '금액 박스', '총 공사금액 — 기본정보와 연결', '금액 돈 공사금액 amount', 'M3 6h14v8H3zM10 8.5v3M8.5 9.5h3', () => blockHTML({type: 'amount', label: '총 공사금액', value: '금 0원', note: '(일금 영 원정 · 부가세 포함)'})],
+  ['note', '안내 박스', '초록 배경으로 강조한 문단', '안내 강조 박스 note', 'M4 4h12v12H4zM7 8h6M7 11h4', () => blockHTML({type: 'note', text: '안내 문구'})],
+  ['sec', '새 조항', '이 조항 아래에 제N조 하나 더', '조항 조 섹션 section', 'M4 5h12M4 10h12M4 15h7M14 13v4M12 15h4', null]
+];
+let bmCtx = null, bmIdx = 0, plusLine = null, plusTimer = null;
+function bmTop(line){
+  let el = line;
+  while (el.parentElement) {
+    const p = el.parentElement;
+    if (p.matches('section.art, .pg')) return el;
+    if (p.tagName === 'DIV' && !p.classList.contains('kv') && getComputedStyle(p).flexDirection === 'column' && p.children.length > 1) return el;
+    el = p;
+  }
+  return line;
+}
+function bmList(){ const q = (bmCtx?.q || '').trim(); return BM_ITEMS.filter(it => !q || (it[1] + ' ' + it[3]).toLowerCase().includes(q.toLowerCase())); }
+function bmRender(){
+  const m = $('#bm'); if (!m || !bmCtx) return; const list = bmList(); if (bmIdx >= list.length) bmIdx = Math.max(0, list.length - 1);
+  m.innerHTML = `<div class="bm-h">${bmCtx.q != null ? `/${esc(bmCtx.q)}` : '블록 넣기'}</div>` + (list.length ? list.map((it, i) => `<button type="button" class="bm-i${i === bmIdx ? ' on' : ''}" data-b="${it[0]}" role="option" aria-selected="${i === bmIdx}"><span class="bm-ic">${it[6] ? `<b>${it[6]}</b>` : `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="${it[4]}"/></svg>`}</span><span class="bm-t"><b>${it[1]}</b><small>${it[2]}</small></span></button>`).join('') : '<p class="bm-none">맞는 블록이 없어요</p>');
+  m.querySelector('.on')?.scrollIntoView({block: 'nearest'});
+}
+function bmOpen(line, anchorRect, q){
+  let m = $('#bm');
+  if (!m) {
+    m = document.createElement('div'); m.id = 'bm'; m.className = 'bm'; m.setAttribute('role', 'listbox'); m.setAttribute('aria-label', '블록 넣기');
+    ($('#ftb')?.parentElement || document.body).appendChild(m);
+    m.addEventListener('mousedown', e => e.preventDefault());
+    m.addEventListener('click', e => { const b = e.target.closest('[data-b]'); if (b) bmChoose(b.dataset.b); });
+    m.addEventListener('mousemove', e => { const b = e.target.closest('[data-b]'); if (!b) return; const i = bmList().findIndex(x => x[0] === b.dataset.b); if (i !== bmIdx) { bmIdx = i; m.querySelectorAll('.bm-i').forEach((x, j) => x.classList.toggle('on', j === i)); } });
+  }
+  const fresh = !bmCtx || bmCtx.line !== line; bmCtx = {line, q}; if (fresh) bmIdx = 0;
+  bmRender(); m.hidden = false;
+  let top = anchorRect.bottom + 4; if (top + m.offsetHeight > innerHeight - 8) top = Math.max(8, anchorRect.top - m.offsetHeight - 4);
+  m.style.top = top + 'px'; m.style.left = Math.max(8, Math.min(anchorRect.left, innerWidth - m.offsetWidth - 8)) + 'px';
+}
+function bmClose(){ const m = $('#bm'); if (m) m.hidden = true; bmCtx = null; }
+function bmChoose(key){
+  if (!bmCtx) return; const {line, q} = bmCtx; bmClose(); if (!line || !line.isConnected) return;
+  const it = BM_ITEMS.find(x => x[0] === key); if (!it) return;
+  // "/표" 처럼 친 글자는 지우고, 그 줄이 비면 그 자리에 블록
+  if (q != null) { const t = firstText(line); if (t) t.textContent = t.textContent.replace(/\/[^\s/]*\s*$/, ''); }
+  const emptyLine = line.tagName === 'P' && !line.textContent.trim();
+  if (key === 'sec') {
+    const sec = line.closest('section.art') || [...document.querySelectorAll('#desk section.art')].pop(); if (!sec) return; let ns;
+    structOp(() => { ns = emptySection(sec); sec.after(ns); if (emptyLine && line.closest('section.art') && line.parentElement.children.length > 1) line.remove(); }, '새 조항을 넣었어요.');
+    if (ns) bmFocus(ns.querySelector('h2 .tt') || ns.querySelector('h2')); return;
+  }
+  let el = null;
+  structOp(() => {
+    const w = document.createElement('div'); w.innerHTML = it[5](); el = w.firstElementChild; if (!el) return false;
+    const top = bmTop(line);
+    if (emptyLine && top === line) line.replaceWith(el); else { top.after(el); if (emptyLine) line.remove(); }
+  }, `${it[1]}를 넣었어요.`);
+  if (el) bmFocus(el.matches('[data-ed]') ? el : el.querySelector('[data-ed]'));
+}
+function bmFocus(f){ if (!f) return; f.focus(); const r = document.createRange(); r.selectNodeContents(f); const s = getSelection(); s.removeAllRanges(); s.addRange(r); f.scrollIntoView({block: 'nearest', behavior: 'smooth'}); }
+function wireBm(desk){
+  // + 버튼: 줄에 마우스를 올리면 왼쪽에
+  let plus = $('#bplus');
+  if (!plus) {
+    plus = document.createElement('button'); plus.type = 'button'; plus.id = 'bplus'; plus.className = 'bplus'; plus.hidden = true;
+    plus.title = '아래에 블록 넣기 (빈 줄에서 / 를 쳐도 돼요)'; plus.setAttribute('aria-label', '블록 넣기');
+    plus.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4.5v11M4.5 10h11"/></svg>';
+    ($('#ftb')?.parentElement || document.body).appendChild(plus);
+    plus.addEventListener('mousedown', e => e.preventDefault());
+    plus.addEventListener('click', () => { if (!plusLine) return; const r = plus.getBoundingClientRect(); bmOpen(plusLine, r, null); });
+    plus.addEventListener('mouseenter', () => clearTimeout(plusTimer));
+  }
+  desk.addEventListener('mousemove', e => {
+    if (!editOn || !canWrite || e.buttons) return;
+    const ed = e.target.closest && e.target.closest('[data-ed]'); if (!ed || ed.closest('td,th')) return;
+    clearTimeout(plusTimer); plusLine = ed;
+    const r = ed.getBoundingClientRect(), pg = ed.closest('.pg')?.getBoundingClientRect();
+    plus.style.top = (r.top + Math.min(r.height, 22) / 2 - 11) + 'px'; plus.style.left = Math.max(4, (pg ? pg.left + 14 : r.left - 28)) + 'px'; plus.hidden = false;
+  });
+  desk.addEventListener('mouseleave', () => { plusTimer = setTimeout(() => { if (!bmCtx) plus.hidden = true; }, 250); });
+  // 빈 줄에서 / 치면 메뉴, 뒤에 글자를 치면 거르기
+  desk.addEventListener('input', () => {
+    const s = getSelection(); if (!s.rangeCount) return; const n = s.getRangeAt(0).startContainer; const line = (n.nodeType === 1 ? n : n.parentElement)?.closest('[data-ed]');
+    const m = line && line.tagName === 'P' && line.textContent.match(/^\s*(?:\d+\.|[①-⑳]|[•·\-●○■□◦▪※])?\s*\/([^\s/]{0,12})$/);
+    if (m) { const r = s.getRangeAt(0).getBoundingClientRect(); bmOpen(line, r.width || r.height ? r : line.getBoundingClientRect(), m[1]); }
+    else if (bmCtx && bmCtx.q != null) bmClose();
+  });
+  if (window.__bmWired) return; window.__bmWired = true;
+  document.addEventListener('keydown', e => {
+    if (!bmCtx || $('#bm')?.hidden) return; const list = bmList();
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopPropagation(); bmIdx = (bmIdx + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % Math.max(1, list.length); bmRender(); }
+    else if (e.key === 'Enter' && !e.isComposing) { if (!list.length) return; e.preventDefault(); e.stopPropagation(); bmChoose(list[bmIdx][0]); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); bmClose(); }
+  }, true);
+  document.addEventListener('mousedown', e => { if (bmCtx && !e.target.closest('#bm') && !e.target.closest('#bplus')) bmClose(); }, true);
+}
 
 
 /* 블록 선택: 여러 줄을 드래그해서 고르고 Delete / Backspace 로 한꺼번에 지우기 */
@@ -819,7 +930,7 @@ function renderEditor(id){
     e.preventDefault(); const text = p.textContent; e.clipboardData.setData('text/plain', text);
     lineClip = {el: p.cloneNode(true), text}; toast('줄을 복사했어요. 붙여 넣을 줄을 누르고 Ctrl+V 하면 그 아래에 들어가요.');
   });
-  wireBlk(desk); wireCells(desk); wireFld(desk);
+  wireBlk(desk); wireCells(desk); wireFld(desk); wireBm(desk);
   desk.addEventListener('mousedown', e => { if (!e.altKey || !canWrite) return; const p = lineOf(e.target); if (p) { e.preventDefault(); insertLineAfter(p, p); toast('줄을 복제했어요.'); } });
   desk.addEventListener('focusin', e => { const cell = canWrite && e.target.closest('td,th'); if (cell && cell.closest('table.t')) showTT(cell); });
   desk.addEventListener('click', e => { const cell = canWrite && e.target.closest('td,th'); if (cell && cell.closest('table.t')) showTT(cell); else if (!e.target.closest('#tt')) hideTT(); });
