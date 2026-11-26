@@ -10,8 +10,8 @@ const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const MAX_DOC = 1_500_000; // bytes
 
 class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
-const json = (data, status = 200) => new Response(JSON.stringify(data), {
-  status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' }
+const json = (data, status = 200, extra = {}) => new Response(JSON.stringify(data), {
+  status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...extra }
 });
 
 export default {
@@ -24,18 +24,22 @@ export default {
 };
 
 async function handle(req, env, url) {
+  await ensureDb(env);
+  const parts0 = url.pathname.replace(/^\/api\//, '');
+  if (parts0 === 'login' && req.method === 'POST') return login(req, env);
+  if (parts0 === 'logout' && req.method === 'POST') return json({ ok: true }, 200, { 'set-cookie': `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Strict` });
   const email = await whoAmI(req, env);
-  const admin = adminList(env).includes(email);
+  const admin = email === ADMIN_ID || adminList(env).includes(email);
   const parts = url.pathname.replace(/^\/api\//, '').split('/').filter(Boolean).map(decodeURIComponent);
   const method = req.method.toUpperCase();
 
-  if (parts[0] === 'me' && method === 'GET') return json({ email, admin, ai: !!env.ANTHROPIC_API_KEY });
+  if (parts[0] === 'me' && method === 'GET') return json({ email, admin, ai: !!env.ANTHROPIC_API_KEY, auth: env.ACCESS_AUD ? 'access' : 'password' });
 
   if (parts[0] === 'ai' && method === 'POST') {
     if (!admin) throw new HttpError(403, 'admin only');
     if (!env.ANTHROPIC_API_KEY) throw new HttpError(501, 'AI not configured');
-    const body = await readJson(req, 200_000);
-    return json({ text: await askClaude(env, body.input) });
+    const body = await readJson(req, 20_000_000);
+    return json({ text: await askClaude(env, body.input, body.images) });
   }
 
   const col = parts[0], rule = COLS[col];
@@ -68,6 +72,26 @@ async function handle(req, env, url) {
   throw new HttpError(405, 'method not allowed');
 }
 
+/* ---------- 처음 실행 시 테이블·예시 데이터 자동 준비 ---------- */
+let dbReady = false;
+async function ensureDb(env) {
+  if (dbReady) return;
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS docs (col TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT, PRIMARY KEY (col, id))').run();
+  const row = await env.DB.prepare('SELECT COUNT(*) AS n FROM docs').first();
+  if (!row || !row.n) {
+    try {
+      const r = await env.ASSETS.fetch(new Request('https://assets.local/example-seed.json'));
+      if (r.ok) {
+        const seed = await r.json(), now = new Date().toISOString(), stmts = [];
+        for (const [col, docs] of Object.entries(seed)) for (const [id, data] of Object.entries(docs))
+          stmts.push(env.DB.prepare('INSERT OR IGNORE INTO docs (col, id, data, updated_at, updated_by) VALUES (?, ?, ?, ?, ?)').bind(col, id, JSON.stringify(data), now, 'example'));
+        if (stmts.length) await env.DB.batch(stmts);
+      }
+    } catch (e) { console.warn('seed', e); }
+  }
+  dbReady = true;
+}
+
 const adminList = env => String(env.ADMIN_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 
 async function readJson(req, max) {
@@ -85,9 +109,46 @@ async function whoAmI(req, env) {
     if (!claims.email) throw new HttpError(401, 'no email');
     return String(claims.email).toLowerCase();
   }
+  // 비밀번호 로그인 (ADMIN_PASSWORD / STAFF_PASSWORD secret)
+  if (env.ADMIN_PASSWORD || env.STAFF_PASSWORD) {
+    const role = await readSession(req, env);
+    if (!role) throw new HttpError(401, 'login required');
+    return role === 'admin' ? ADMIN_ID : 'staff@opk.local';
+  }
   // 로컬 개발 전용: .dev.vars 에 DEV_EMAIL 을 넣었을 때만
   if (env.DEV_EMAIL) return String(env.DEV_EMAIL).toLowerCase();
-  throw new HttpError(401, 'Access not configured');
+  throw new HttpError(503, 'setup required');
+}
+
+/* ---------- 비밀번호 로그인 ---------- */
+const COOKIE = 'opk_s', ADMIN_ID = 'admin@opk.local', DAY = 86400;
+const enc = new TextEncoder();
+const b64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+async function hmacKey(env) {
+  const raw = await crypto.subtle.digest('SHA-256', enc.encode(`opk|${env.SESSION_SECRET || ''}|${env.ADMIN_PASSWORD || ''}|${env.STAFF_PASSWORD || ''}`));
+  return crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
+}
+async function sign(env, payload) { const body = b64u(enc.encode(JSON.stringify(payload))); const sig = b64u(await crypto.subtle.sign('HMAC', await hmacKey(env), enc.encode(body))); return `${body}.${sig}`; }
+async function readSession(req, env) {
+  const m = (req.headers.get('cookie') || '').match(new RegExp(`(?:^|;\\s*)${COOKIE}=([^;]+)`)); if (!m) return null;
+  const [body, sig] = m[1].split('.'); if (!body || !sig) return null;
+  const ok = await crypto.subtle.verify('HMAC', await hmacKey(env), b64urlBytes(sig), enc.encode(body)); if (!ok) return null;
+  const p = JSON.parse(new TextDecoder().decode(b64urlBytes(body)));
+  if (!p.exp || p.exp < Date.now() / 1000) return null;
+  if (p.role === 'admin' && !env.ADMIN_PASSWORD) return null;
+  if (p.role === 'staff' && !env.STAFF_PASSWORD) return null;
+  return p.role;
+}
+async function same(a, b) { const [x, y] = await Promise.all([a, b].map(v => crypto.subtle.digest('SHA-256', enc.encode(String(v))))); const u = new Uint8Array(x), w = new Uint8Array(y); let d = 0; for (let i = 0; i < u.length; i++) d |= u[i] ^ w[i]; return d === 0; }
+async function login(req, env) {
+  if (!env.ADMIN_PASSWORD && !env.STAFF_PASSWORD) throw new HttpError(503, 'setup required');
+  const { password } = await readJson(req, 2000);
+  let role = null;
+  if (env.ADMIN_PASSWORD && await same(password, env.ADMIN_PASSWORD)) role = 'admin';
+  else if (env.STAFF_PASSWORD && await same(password, env.STAFF_PASSWORD)) role = 'staff';
+  if (!role) { await new Promise(r => setTimeout(r, 800)); throw new HttpError(401, 'wrong password'); }
+  const token = await sign(env, { role, exp: Math.floor(Date.now() / 1000) + 30 * DAY });
+  return json({ ok: true, role }, 200, { 'set-cookie': `${COOKIE}=${token}; Path=/; Max-Age=${30 * DAY}; HttpOnly; Secure; SameSite=Strict` });
 }
 
 let certCache = { at: 0, keys: [] };
@@ -118,8 +179,11 @@ async function verifyAccessJwt(token, env) {
 }
 
 /* ---------- AI 번역 ---------- */
-async function askClaude(env, input) {
-  const messages = typeof input === 'string' ? [{ role: 'user', content: input }]
+async function askClaude(env, input, images) {
+  const imgs = (Array.isArray(images) ? images : []).slice(0, 8)
+    .filter(i => i && /^image\/(jpeg|png|webp|gif)$/.test(i.media_type) && typeof i.data === 'string')
+    .map(i => ({ type: 'image', source: { type: 'base64', media_type: i.media_type, data: i.data } }));
+  const messages = typeof input === 'string' ? [{ role: 'user', content: imgs.length ? [...imgs, { type: 'text', text: input }] : input }]
     : Array.isArray(input) ? input.filter(m => m && (m.role === 'user' || m.role === 'assistant')).map(m => ({ role: m.role, content: String(m.content) }))
     : null;
   if (!messages || !messages.length) throw new HttpError(400, 'input required');
