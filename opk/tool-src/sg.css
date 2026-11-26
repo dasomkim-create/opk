@@ -1,0 +1,108 @@
+
+/*
+VOICE: 계약서 편집기와 같은 조용한 작업실. 어두운 책상, 밝은 것은 받는 사람이 보게 될 메일 한 통뿐.
+IDEA: 명함첩 — 목록은 사람별 명함 카드, 편집은 명함 한 장을 메일 아래에 대어 보는 것.
+PICTURE: 실제 메일 화면 미리보기(보낸 사람·본문·서명)가 그림이다. 카드 썸네일도 실제 서명.
+COLOUR and TYPE: 먹색 #121312, 회색 패널, OPK 그린 #6eb92b 하나. Pretendard 4단계.
+LAYOUT: 위 고정 바. 편집은 왼쪽 입력 기둥 + 오른쪽 메일 미리보기, 900px 아래 한 열.
+*/
+@font-face{font-family:"Pretendard";src:url("fonts/Pretendard-Regular.woff2") format("woff2");font-weight:400;font-display:swap}
+@font-face{font-family:"Pretendard";src:url("fonts/Pretendard-SemiBold.woff2") format("woff2");font-weight:500 600;font-display:swap}
+@font-face{font-family:"Pretendard";src:url("fonts/Pretendard-Bold.woff2") format("woff2");font-weight:700 900;font-display:swap}
+:root{color-scheme:dark;--bg:#121312;--panel:#1b1c1b;--panel2:#242624;--line:#2f322f;--ink:#ededeb;--mute:#a3a7a2;--green:#6eb92b;--green2:#8fd14f;--warn:#e5a83b;--err:#ef6b6e}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 "Pretendard",-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;overflow-x:clip}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+.btn{height:40px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600;font-size:14px;white-space:nowrap}
+.btn:hover{border-color:#4a4e49}
+.btn.pri{background:var(--green);border-color:var(--green);color:#0d1a05}.btn.pri:hover{background:var(--green2)}
+.btn.ghost{background:transparent;border-color:transparent}
+.btn[disabled]{opacity:.45;cursor:default}
+:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px max(3vw,16px);background:rgba(18,19,18,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px;margin-right:auto}
+.brand b{font-size:17px}.brand svg{width:46px;height:32px;flex:none}
+.chip{font-size:13px;color:var(--mute);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--green)}
+.chip.dirty i{background:var(--warn)}.chip.err i{background:var(--err)}
+/* home */
+.home{padding:clamp(24px,4vw,48px) max(3vw,16px) 64px;max-width:1240px;margin:0 auto}
+.home h1{font-size:clamp(28px,4vw,40px);line-height:1.1;margin:0 0 6px;letter-spacing:-.01em}
+.sub{color:var(--mute);margin:0 0 24px}
+.search{display:flex;align-items:center;gap:10px;margin:0 0 24px;max-width:560px;height:48px;padding:0 16px;border:1px solid var(--line);border-radius:999px;background:var(--panel)}
+.search:focus-within{border-color:var(--green)}
+.search svg{width:18px;height:18px;flex:none;color:var(--mute)}
+.search input{flex:1;height:100%;border:0;background:none;font-size:16px;outline:none}
+.search .cnt{font-size:13px;color:var(--mute);white-space:nowrap}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin:-8px 0 24px}
+.pill{height:36px;padding:0 14px;border-radius:999px;border:1px solid var(--line);background:none;font-size:13px;font-weight:600;color:var(--mute)}
+.pill.on{background:var(--ink);color:#111;border-color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:20px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:12px;cursor:pointer;transition:border-color .15s,transform .15s}
+.card:hover{border-color:#4f564c;transform:translateY(-2px)}
+.mini{position:relative;height:150px;background:#fff;border-radius:6px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.45)}
+.mini>div{position:absolute;left:16px;top:50%;width:max-content;transform-origin:0 50%;translate:0 -50%;pointer-events:none}
+.card h3{margin:0;font-size:16px;line-height:1.35}
+.meta{color:var(--mute);font-size:13px;display:flex;justify-content:space-between;gap:8px;align-items:center}
+.meta .btn{height:32px;padding:0 10px;font-size:13px}
+.new{border-style:dashed;align-items:center;justify-content:center;min-height:240px;color:var(--mute);text-align:center}
+.new .plus{font-size:34px;line-height:1;color:var(--green)}
+.empty{grid-column:1/-1;color:var(--mute);padding:40px 0;text-align:center}
+mark{background:rgba(110,185,43,.28);color:inherit;border-radius:3px}
+/* editor */
+.ed{display:grid;grid-template-columns:minmax(320px,400px) minmax(0,1fr);align-items:start;max-width:1440px;margin:0 auto}
+.form{padding:20px max(2vw,16px) 80px;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:22px}
+.grp{display:flex;flex-direction:column;gap:10px}
+.grp h4{margin:0;font-size:13px;font-weight:600;color:var(--mute)}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.f{display:flex;flex-direction:column;gap:4px}
+.f span{font-size:12px;color:var(--mute)}
+.f input{height:44px;border-radius:8px;border:1px solid var(--line);background:var(--panel);padding:0 12px;font-size:16px}
+.f input:focus{border-color:var(--green);outline:none}
+.seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.seg button{min-height:56px;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);text-align:left;display:flex;flex-direction:column;justify-content:center}
+.seg button b{font-size:14px}.seg button small{font-size:12px;color:var(--mute);line-height:1.35}
+.seg button.on{border-color:var(--green);background:rgba(110,185,43,.1)}
+.logos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.lg{position:relative;height:92px;border-radius:10px;border:2px solid transparent;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:10px 8px 6px}
+.lg img{max-width:100%;max-height:44px;min-height:0;display:block}
+.lg small{font-size:12px;color:#666;line-height:1.2}
+.lg.on{border-color:var(--green);box-shadow:0 0 0 3px rgba(110,185,43,.3)}
+.lg.none{background:var(--panel);color:var(--mute);font-size:13px;font-weight:600;border-color:var(--line)}
+.lg.none.on{border-color:var(--green)}
+.inline{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--mute)}
+.inline input[type=range]{flex:1;accent-color:var(--green);height:32px}
+.tog{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:3px}
+.tog button{height:32px;padding:0 12px;border:0;border-radius:999px;background:none;font-size:13px;font-weight:600;color:var(--mute)}
+.tog button.on{background:var(--panel2);color:var(--ink)}
+.view{position:sticky;top:65px;padding:20px max(2vw,16px) 40px;display:flex;flex-direction:column;gap:14px}
+.vbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mail{background:#fff;color:#222;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,.55);overflow:hidden;margin:0 auto;width:100%;max-width:680px;transition:max-width .2s}
+.mail.mob{max-width:375px}
+.mhead{padding:14px 20px;border-bottom:1px solid #e6e6e6;font-size:13px;color:#666;line-height:1.7}
+.mhead b{color:#111;font-weight:600}
+.mbody{padding:20px;font:14px/1.7 "Malgun Gothic","Apple SD Gothic Neo",Arial,sans-serif;color:#222;overflow-x:auto}
+.mbody p{margin:0 0 14px}
+.sigwrap{margin-top:22px;padding-top:4px}
+.mail.noimg .sigwrap img{visibility:hidden}
+.acts{display:flex;gap:8px;flex-wrap:wrap}
+.note{font-size:13px;color:var(--mute);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;line-height:1.55}
+.note.warn{border-color:rgba(229,168,59,.5)}
+.note b{color:var(--ink)}
+.set{max-width:760px;margin:0 auto;padding:clamp(24px,4vw,40px) max(3vw,16px) 80px;display:flex;flex-direction:column;gap:24px}
+.set h1{font-size:clamp(26px,3.6vw,36px);margin:0;line-height:1.15;letter-spacing:-.01em}
+.urlrow{display:grid;grid-template-columns:120px minmax(0,1fr);gap:10px;align-items:center}
+.urlrow .lg{height:60px}.urlrow .lg img{max-height:40px}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#f4f4f2;color:#111;padding:12px 18px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:0 10px 30px rgba(0,0,0,.4);display:none;max-width:min(92vw,520px);z-index:50}
+.toast.show{display:block}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:60;padding:16px}
+.modal.show{display:flex}
+.dlg{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;width:min(440px,100%)}
+.dlg h4{margin:0 0 8px;font-size:18px}.dlg p{margin:0 0 18px;color:var(--mute);white-space:pre-line}
+.dlg .row{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+#clip{position:fixed;left:-9999px;top:0;background:#fff;color:#000}
+@media(max-width:900px){.ed{grid-template-columns:minmax(0,1fr)}.form{border-right:0;padding-bottom:20px}.view{position:static;order:-1;border-bottom:1px solid var(--line)}}
+@media(max-width:600px){.grid{grid-template-columns:minmax(0,1fr)}.row2{grid-template-columns:minmax(0,1fr)}.bar{gap:8px}.urlrow{grid-template-columns:minmax(0,1fr)}}
+@media(prefers-reduced-motion:reduce){.card,.mail{transition:none}.card:hover{transform:none}}
