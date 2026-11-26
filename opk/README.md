@@ -10,7 +10,8 @@ Cloudflare Workers + D1 로 돌아가며, **홈페이지(opk-korea-main)와 완�
 ## 구조
 
 ```
-public/            화면 (정적 파일)
+tool-src/          화면 소스 (여기서 고치고 python3 build.py)
+public/            화면 (빌드 결과, 정적 파일)
   index.html       계약서·메일 서명 화면 전체
   cf-shim.js       화면 ↔ /api 연결부
   fonts/ logos/
