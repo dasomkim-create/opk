@@ -109,8 +109,8 @@ async function whoAmI(req, env) {
     if (!claims.email) throw new HttpError(401, 'no email');
     return String(claims.email).toLowerCase();
   }
-  // 비밀번호 로그인 (ADMIN_PASSWORD / STAFF_PASSWORD secret)
-  if (env.ADMIN_PASSWORD || env.STAFF_PASSWORD) {
+  // 아이디·비밀번호 로그인 (LOGIN_ID + LOGIN_PASSWORD secret) 또는 ADMIN_PASSWORD / STAFF_PASSWORD
+  if (env.LOGIN_PASSWORD || env.ADMIN_PASSWORD || env.STAFF_PASSWORD) {
     const role = await readSession(req, env);
     if (!role) throw new HttpError(401, 'login required');
     return role === 'admin' ? ADMIN_ID : 'staff@opk.local';
@@ -125,7 +125,7 @@ const COOKIE = 'opk_s', ADMIN_ID = 'admin@opk.local', DAY = 86400;
 const enc = new TextEncoder();
 const b64u = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 async function hmacKey(env) {
-  const raw = await crypto.subtle.digest('SHA-256', enc.encode(`opk|${env.SESSION_SECRET || ''}|${env.ADMIN_PASSWORD || ''}|${env.STAFF_PASSWORD || ''}`));
+  const raw = await crypto.subtle.digest('SHA-256', enc.encode(`opk|${env.SESSION_SECRET || ''}|${env.LOGIN_ID || ''}|${env.LOGIN_PASSWORD || ''}|${env.ADMIN_PASSWORD || ''}|${env.STAFF_PASSWORD || ''}`));
   return crypto.subtle.importKey('raw', raw, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify']);
 }
 async function sign(env, payload) { const body = b64u(enc.encode(JSON.stringify(payload))); const sig = b64u(await crypto.subtle.sign('HMAC', await hmacKey(env), enc.encode(body))); return `${body}.${sig}`; }
@@ -135,16 +135,17 @@ async function readSession(req, env) {
   const ok = await crypto.subtle.verify('HMAC', await hmacKey(env), b64urlBytes(sig), enc.encode(body)); if (!ok) return null;
   const p = JSON.parse(new TextDecoder().decode(b64urlBytes(body)));
   if (!p.exp || p.exp < Date.now() / 1000) return null;
-  if (p.role === 'admin' && !env.ADMIN_PASSWORD) return null;
+  if (p.role === 'admin' && !env.ADMIN_PASSWORD && !env.LOGIN_PASSWORD) return null;
   if (p.role === 'staff' && !env.STAFF_PASSWORD) return null;
   return p.role;
 }
 async function same(a, b) { const [x, y] = await Promise.all([a, b].map(v => crypto.subtle.digest('SHA-256', enc.encode(String(v))))); const u = new Uint8Array(x), w = new Uint8Array(y); let d = 0; for (let i = 0; i < u.length; i++) d |= u[i] ^ w[i]; return d === 0; }
 async function login(req, env) {
-  if (!env.ADMIN_PASSWORD && !env.STAFF_PASSWORD) throw new HttpError(503, 'setup required');
-  const { password } = await readJson(req, 2000);
+  if (!env.LOGIN_PASSWORD && !env.ADMIN_PASSWORD && !env.STAFF_PASSWORD) throw new HttpError(503, 'setup required');
+  const { id = '', password = '' } = await readJson(req, 2000);
   let role = null;
-  if (env.ADMIN_PASSWORD && await same(password, env.ADMIN_PASSWORD)) role = 'admin';
+  if (env.LOGIN_PASSWORD && await same(String(id).trim().toLowerCase(), String(env.LOGIN_ID || '').trim().toLowerCase()) && await same(password, env.LOGIN_PASSWORD)) role = 'admin';
+  else if (env.ADMIN_PASSWORD && await same(password, env.ADMIN_PASSWORD)) role = 'admin';
   else if (env.STAFF_PASSWORD && await same(password, env.STAFF_PASSWORD)) role = 'staff';
   if (!role) { await new Promise(r => setTimeout(r, 800)); throw new HttpError(401, 'wrong password'); }
   const token = await sign(env, { role, exp: Math.floor(Date.now() / 1000) + 30 * DAY });
