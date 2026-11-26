@@ -692,7 +692,7 @@ function bmChoose(key){
   const it = BM_ITEMS.find(x => x[0] === key); if (!it) return;
   // "/표" 처럼 친 글자는 지우고, 그 줄이 비면 그 자리에 블록
   if (q != null) { const t = firstText(line); if (t) t.textContent = t.textContent.replace(/\/[^\s/]*\s*$/, ''); }
-  const emptyLine = line.tagName === 'P' && !line.textContent.trim();
+  const emptyLine = line.tagName === 'P' && MARK_ONLY.test(line.textContent);
   if (key === 'sec') {
     const sec = line.closest('section.art') || [...document.querySelectorAll('#desk section.art')].pop(); if (!sec) return; let ns;
     structOp(() => { ns = emptySection(sec); sec.after(ns); if (emptyLine && line.closest('section.art') && line.parentElement.children.length > 1) line.remove(); }, '새 조항을 넣었어요.');
