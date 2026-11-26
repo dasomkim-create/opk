@@ -419,6 +419,18 @@ body.viewing :is(#ct,#exp) [data-ed]{outline:none}
 :is(#ct,#exp) .ph.ph-m::after{content:attr(data-ph);color:#b4b8bd;pointer-events:none}
 :is(#ct,#exp) .art{cursor:text}
 :is(#ct,#exp) .art>h2{cursor:default}
+:is(#ct,#exp) table.blk,:is(#ct,#exp) div.blk{outline:2px solid rgba(110,185,43,.6);outline-offset:2px;border-radius:3px}
+:is(#ct,#exp) table.blk td,:is(#ct,#exp) table.blk th{background-color:rgba(110,185,43,.14)!important}
+:is(#ct,#exp) div.blk{background-color:rgba(110,185,43,.14)!important}
+:is(#ct,#exp) .bgrip{position:fixed;z-index:31;width:20px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:#a3a7a2;display:grid;place-items:center;cursor:grab;touch-action:none;transition:background-color .15s,color .15s}
+:is(#ct,#exp) .bgrip[hidden]{display:none}
+:is(#ct,#exp) .bgrip:hover{background:rgba(0,0,0,.06);color:#333}
+:is(#ct,#exp) .bgrip:active{cursor:grabbing}
+:is(#ct,#exp) .bgrip svg{width:14px;height:14px;fill:currentColor}
+:is(#ct,#exp) .bdrop{position:fixed;z-index:32;height:3px;border-radius:2px;background:#6eb92b;box-shadow:0 0 0 2px rgba(110,185,43,.18);pointer-events:none}
+:is(#ct,#exp) .bdrop[hidden]{display:none}
+:is(#ct,#exp) .moving{opacity:.45}
+:is(#ct,#exp) .bplus{width:20px}
 
 #sg :focus-visible{outline:2px solid var(--green);outline-offset:2px}
 #sg .bar{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px max(3vw,16px);background:var(--barbg);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
@@ -903,7 +915,7 @@ function wireCells(desk){
     getSelection().removeAllRanges(); cellSelect(cellDrag.a, c);
   });
   if (window.__cellWired) return; window.__cellWired = true;
-  document.addEventListener('mouseup', () => { if (cellDrag && cellDrag.on && cellDrag.a.isConnected) { const a = cellDrag.a; a.focus({preventScroll: true}); setTimeout(() => { if (a.isConnected) showTT(a); }, 30); } cellDrag = null; });
+  document.addEventListener('mouseup', () => { if (cellDrag && cellDrag.on) window.__dragEnd = Date.now(); if (cellDrag && cellDrag.on && cellDrag.a.isConnected) { const a = cellDrag.a; a.focus({preventScroll: true}); setTimeout(() => { if (a.isConnected) showTT(a); }, 30); } cellDrag = null; });
   document.addEventListener('keydown', e => {
     if (cellSel.length < 2) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); flushPend(); cellSel.forEach(x => { x.innerHTML = '<br>'; }); pushHist(); markDirty(); refreshThumbs(); }
@@ -1292,12 +1304,13 @@ function wireBm(desk){
     const ed = e.target.closest && e.target.closest('[data-ed]'); if (!ed || ed.closest('td,th')) return;
     clearTimeout(plusTimer); plusLine = ed;
     const r = ed.getBoundingClientRect(), pg = ed.closest('.pg')?.getBoundingClientRect();
-    plus.style.top = (r.top + Math.min(r.height, 22) / 2 - 11) + 'px'; plus.style.left = Math.max(4, (pg ? pg.left + 14 : r.left - 28)) + 'px'; plus.hidden = false;
+    plus.style.top = (r.top + Math.min(r.height, 22) / 2 - 11) + 'px'; plus.style.left = handleX(pg, 0) + 'px'; plus.hidden = false;
   });
   desk.addEventListener('mouseleave', () => { plusTimer = setTimeout(() => { if (!bmCtx) plus.hidden = true; }, 250); });
   // 조항 빈 곳(내용 칸 아래 여백 등)을 누르면 맨 끝에 새 줄
   desk.addEventListener('click', e => {
     if (!editOn || !canWrite || e.target.closest('[data-ed], button, table, .fld, header')) return;
+    if (Date.now() - (window.__dragEnd || 0) < 400 || !getSelection().isCollapsed) return; // 드래그 끝은 클릭으로 치지 않기
     let sec = e.target.closest('section.art');
     if (!sec) { // 조항 아래 빈 종이를 눌렀으면 바로 위 조항 끝에 이어 쓰기 (서명란·쪽 번호 쪽은 제외)
       const pg = e.target.closest('.pg'); if (!pg) return;
@@ -1328,42 +1341,123 @@ function wireBm(desk){
 }
 
 
-/* 블록 선택: 여러 줄을 드래그해서 고르고 Delete / Backspace 로 한꺼번에 지우기 */
+/* + 와 ⋮⋮ 손잡이 자리: 종이 바깥 여백이 넉넉하면 바깥, 아니면 종이 왼쪽 여백 안 */
+function handleX(pg, i){ if (!pg) return 4; const room = pg.left - (ROOT.querySelector('#desk')?.getBoundingClientRect().left || 0); return room >= 52 ? pg.left - 48 + i * 22 : Math.max(2, pg.left + 2 + i * 20); }
+/* 블록 옮기기: 줄 왼쪽 ⋮⋮ 손잡이를 잡고 끌어다 놓기 (드래그로 여러 개 골라 두었으면 함께) */
+let gripUnit = null, gripTimer = null, mv = null;
+function wireMove(desk){
+  let grip = $('#bgrip'), line = $('#bdrop');
+  if (!grip) {
+    grip = document.createElement('button'); grip.type = 'button'; grip.id = 'bgrip'; grip.className = 'bgrip'; grip.hidden = true;
+    grip.title = '끌어서 옮기기'; grip.setAttribute('aria-label', '블록 끌어서 옮기기');
+    grip.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="7.5" cy="5" r="1.4"/><circle cx="12.5" cy="5" r="1.4"/><circle cx="7.5" cy="10" r="1.4"/><circle cx="12.5" cy="10" r="1.4"/><circle cx="7.5" cy="15" r="1.4"/><circle cx="12.5" cy="15" r="1.4"/></svg>';
+    line = document.createElement('div'); line.id = 'bdrop'; line.className = 'bdrop'; line.hidden = true;
+    const host = $('#ftb')?.parentElement || document.body; host.appendChild(grip); host.appendChild(line);
+    grip.addEventListener('mouseenter', () => clearTimeout(gripTimer));
+    grip.addEventListener('pointerdown', e => {
+      if (e.button !== 0 || !gripUnit || !gripUnit.isConnected) return; e.preventDefault();
+      const units = blkSel.includes(gripUnit) ? [...blkSel] : [gripUnit];
+      mv = {units, target: null, before: false}; units.forEach(u => u.classList.add('blk', 'moving'));
+      grip.setPointerCapture(e.pointerId); document.body.classList.add('moving-blk'); $('#bplus') && ($('#bplus').hidden = true);
+      if (typeof hideFTB === 'function') hideFTB();
+    });
+    grip.addEventListener('pointermove', e => {
+      if (!mv) return;
+      const t = blkUnit(document.elementFromPoint(e.clientX, e.clientY));
+      if (!t || mv.units.some(u => u === t || u.contains(t))) { line.hidden = true; mv.target = null; return; }
+      const r = t.getBoundingClientRect(), before = e.clientY < r.top + r.height / 2;
+      mv.target = t; mv.before = before;
+      line.hidden = false; line.style.left = r.left + 'px'; line.style.width = r.width + 'px'; line.style.top = ((before ? r.top : r.bottom) - 1) + 'px';
+    });
+    const end = () => {
+      if (!mv) return; const {units, target, before} = mv; mv = null;
+      line.hidden = true; document.body.classList.remove('moving-blk'); units.forEach(u => u.classList.remove('moving'));
+      if (!target || !target.isConnected) { units.forEach(u => u.classList.remove('blk')); return; }
+      const from = new Set(units.map(u => u.parentElement)), fromSecs = new Set(units.map(u => u.closest('section.art')).filter(Boolean));
+      structOp(() => {
+        const ts = target.closest('section.art'); if (ts) secBody(ts); // 조항 내용 칸 안으로만
+        if (before) units.forEach(u => target.before(u)); else { let at = target; units.forEach(u => { at.after(u); at = u; }); }
+        from.forEach(pr => { if (pr && pr.isConnected && pr.tagName === 'DIV' && !pr.children.length && pr.parentElement && !pr.parentElement.matches('section.art, .pg')) pr.remove(); });
+        [...from, target.parentElement].forEach(pr => { if (pr && pr.isConnected) renum(pr); });
+        fromSecs.forEach(sec => { if (!sec.isConnected) return; const body = secBody(sec); if (!body.textContent.trim() && !body.querySelector('table')) { body.innerHTML = ''; body.appendChild(blankLine()); } });
+      }, units.length > 1 ? `블록 ${units.length}개를 옮겼어요.` : '옮겼어요.');
+      blkClear(); grip.hidden = true;
+    };
+    grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
+  }
+  // 블록 위에 마우스를 올리면 왼쪽(+ 옆)에 손잡이
+  desk.addEventListener('mousemove', e => {
+    if (!editOn || !canWrite || e.buttons || mv) return;
+    const u = blkUnit(e.target); if (!u) return;
+    clearTimeout(gripTimer); gripUnit = u;
+    const r = u.getBoundingClientRect(), pg = u.closest('.pg')?.getBoundingClientRect();
+    const firstLine = u.tagName === 'TABLE' || u.tagName === 'DIV' ? Math.min(r.height, 24) : Math.min(r.height, 22);
+    grip.style.top = (r.top + firstLine / 2 - 11) + 'px'; grip.style.left = handleX(pg, 1) + 'px'; grip.hidden = false;
+  });
+  desk.addEventListener('mouseleave', () => { gripTimer = setTimeout(() => { if (!mv) grip.hidden = true; }, 250); });
+}
+
+
+/* 블록 선택: 드래그로 줄과 블록(금액 박스·안내 박스·2단 줄·표)을 통째로 고르고 Delete / Backspace 로 한꺼번에 지우기 */
 let blkSel = [], blkDrag = null;
 /* 드래그하는 동안 떠 있는 툴바가 아래 줄을 가리지 않게 잠깐 투명·통과 */
 function ftbGhost(on){ const b = document.querySelector('#ftb'); if (b) { b.style.pointerEvents = on ? 'none' : ''; b.style.opacity = on ? '0' : ''; } }
-const isLine = el => !!el && el.tagName === 'P' && el.hasAttribute('data-ed') && !el.closest('td,th');
+const inSig = el => { const pg = el.closest('.pg'); if (!pg) return true; const sig = [...pg.children].find(ch => ch.tagName === 'DIV' && ch.querySelectorAll('table').length >= 2); return !!(sig && sig.contains(el)); };
+/* 고를 수 있는 한 덩어리: 표 · 2단 줄 · 색 박스(금액·안내) · 보통 줄. 머리말·서명란은 빼기 */
+function blkUnit(el){
+  if (!el || !el.closest || !el.closest('#desk .pg') || el.closest('header') || inSig(el)) return null;
+  const t = el.closest('table.t'); if (t) return t;
+  const kv = el.closest('.kv'); if (kv) return kv;
+  const box = el.closest('section.art div[style*="background"]'); if (box) return box;
+  const p = el.closest('p[data-ed]'); if (p && !p.closest('td,th')) return p;
+  return null;
+}
+const isUnit = el => blkUnit(el) === el;
+function blkUnits(){
+  const out = [];
+  ROOT.querySelectorAll('#desk .pg').forEach(pg => {
+    const w = document.createTreeWalker(pg, NodeFilter.SHOW_ELEMENT, {acceptNode: n => isUnit(n) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP});
+    let n; while ((n = w.nextNode())) if (!out.some(u => u.contains(n))) out.push(n);
+  });
+  return out;
+}
 function blkClear(){ blkSel.forEach(p => p.classList.remove('blk')); blkSel = []; }
 function blkSet(a, b){
-  const all = [...ROOT.querySelectorAll('#desk [data-ed]')].filter(isLine);
+  const all = blkUnits();
   let i = all.indexOf(a), j = all.indexOf(b); if (i < 0 || j < 0) return; if (i > j) [i, j] = [j, i];
   blkClear(); blkSel = all.slice(i, j + 1); blkSel.forEach(p => p.classList.add('blk'));
 }
 function blkDelete(){
-  flushPend(); const n = blkSel.length, parents = new Set(blkSel.map(p => p.parentNode));
+  flushPend(); const n = blkSel.length, parents = new Set(blkSel.map(p => p.parentNode)), secs = new Set(blkSel.map(p => p.closest('section.art')).filter(Boolean));
+  const lines = blkSel.filter(u => u.tagName === 'P').length, blocks = n - lines;
   blkSel.forEach(p => p.remove()); blkSel = [];
-  parents.forEach(pr => { if (pr.isConnected) renum(pr); });
-  pushHist(); markDirty(); refreshThumbs(); toast(`${n}줄을 지웠어요. Ctrl+Z 로 되돌릴 수 있어요.`);
+  // 비어 버린 묶음은 정리하고, 내용이 다 지워진 조항에는 빈 줄 하나 남기기
+  parents.forEach(pr => { if (!pr.isConnected) return; if (pr.tagName === 'DIV' && !pr.children.length && !pr.matches('.pg') && pr.parentElement && !pr.parentElement.matches('section.art')) pr.remove(); else renum(pr); });
+  secs.forEach(sec => { if (!sec.isConnected) return; const body = secBody(sec); if (!body.textContent.trim() && !body.querySelector('table')) { body.innerHTML = ''; body.appendChild(blankLine()); } });
+  pushHist(); markDirty(); refreshThumbs();
+  toast(`${[lines && lines + '줄', blocks && '블록 ' + blocks + '개'].filter(Boolean).join(' · ')}${blocks ? '를' : '을'} 지웠어요. Ctrl+Z 로 되돌릴 수 있어요.`);
 }
 function wireBlk(desk){
   desk.addEventListener('mousedown', e => {
     blkClear(); blkDrag = null;
     if (e.button !== 0 || e.altKey || !editOn || !canWrite) return;
-    const p = e.target.closest && e.target.closest('[data-ed]');
-    if (isLine(p)) { blkDrag = {start: p, on: false}; ftbGhost(true); }
+    if (e.target.closest && e.target.closest('td,th')) return; // 표 칸에서 시작하면 칸 고르기(합치기)
+    const u = blkUnit(e.target);
+    if (u) { blkDrag = {start: u, on: false}; ftbGhost(true); }
   });
   desk.addEventListener('mousemove', e => {
     if (!blkDrag || !(e.buttons & 1)) return;
-    const el = document.elementFromPoint(e.clientX, e.clientY), p = el && el.closest && el.closest('[data-ed]');
-    if (!isLine(p) || (p === blkDrag.start && !blkDrag.on)) return;
-    if (!blkDrag.on) { blkDrag.on = true; desk.classList.add('blking'); document.activeElement?.blur?.(); }
-    getSelection().removeAllRanges(); blkSet(blkDrag.start, p);
+    const u = blkUnit(document.elementFromPoint(e.clientX, e.clientY));
+    if (!u || (u === blkDrag.start && !blkDrag.on)) return;
+    if (!blkDrag.on) { blkDrag.on = true; desk.classList.add('blking'); document.activeElement?.blur?.(); if (typeof hideFTB === 'function') hideFTB(); }
+    getSelection().removeAllRanges(); blkSet(blkDrag.start, u);
   });
   if (window.__blkWired) return; window.__blkWired = true;
-  document.addEventListener('mouseup', () => { blkDrag = null; ftbGhost(false); ROOT.querySelectorAll('.blking').forEach(d => d.classList.remove('blking')); });
+  document.addEventListener('mouseup', () => { if (blkDrag && blkDrag.on) window.__dragEnd = Date.now(); blkDrag = null; ftbGhost(false); ROOT.querySelectorAll('.blking').forEach(d => d.classList.remove('blking')); });
   document.addEventListener('keydown', e => {
     if (!blkSel.length) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); if (blkSel[0].isConnected) blkDelete(); else blkSel = []; }
+    else if (e.key === 'Escape') blkClear();
     else if (!['Shift', 'Control', 'Meta', 'Alt'].includes(e.key)) blkClear();
   }, true);
 }
@@ -1550,7 +1644,7 @@ function renderEditor(id){
     e.preventDefault(); const text = p.textContent; e.clipboardData.setData('text/plain', text);
     lineClip = {el: p.cloneNode(true), text}; toast('줄을 복사했어요. 붙여 넣을 줄을 누르고 Ctrl+V 하면 그 아래에 들어가요.');
   });
-  wireBlk(desk); wireCells(desk); wireFld(desk); wireBm(desk);
+  wireBlk(desk); wireCells(desk); wireFld(desk); wireBm(desk); wireMove(desk);
   desk.addEventListener('mousedown', e => { if (!e.altKey || !canWrite) return; const p = lineOf(e.target); if (p) { e.preventDefault(); insertLineAfter(p, p); toast('줄을 복제했어요.'); } });
   desk.addEventListener('focusin', e => { const cell = canWrite && e.target.closest('td,th'); if (cell && cell.closest('table.t')) showTT(cell); });
   desk.addEventListener('click', e => { const cell = canWrite && e.target.closest('td,th'); if (cell && cell.closest('table.t')) showTT(cell); else if (!e.target.closest('#tt')) hideTT(); });

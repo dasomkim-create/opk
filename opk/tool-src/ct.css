@@ -252,3 +252,17 @@ input.fp-in[inputmode=numeric]{padding-right:18px}
 .ph.ph-m::after{content:attr(data-ph);color:#b4b8bd;pointer-events:none}
 .art{cursor:text}
 .art>h2{cursor:default}
+/* 드래그로 고른 블록(표·2단·금액/안내 박스) */
+table.blk,div.blk{outline:2px solid rgba(110,185,43,.6);outline-offset:2px;border-radius:3px}
+table.blk td,table.blk th{background-color:rgba(110,185,43,.14)!important}
+div.blk{background-color:rgba(110,185,43,.14)!important}
+/* 블록 옮기기 손잡이 · 놓을 자리 선 */
+.bgrip{position:fixed;z-index:31;width:20px;height:22px;padding:0;border:0;border-radius:6px;background:transparent;color:#a3a7a2;display:grid;place-items:center;cursor:grab;touch-action:none;transition:background-color .15s,color .15s}
+.bgrip[hidden]{display:none}
+.bgrip:hover{background:rgba(0,0,0,.06);color:#333}
+.bgrip:active{cursor:grabbing}
+.bgrip svg{width:14px;height:14px;fill:currentColor}
+.bdrop{position:fixed;z-index:32;height:3px;border-radius:2px;background:#6eb92b;box-shadow:0 0 0 2px rgba(110,185,43,.18);pointer-events:none}
+.bdrop[hidden]{display:none}
+.moving{opacity:.45}
+.bplus{width:20px}
