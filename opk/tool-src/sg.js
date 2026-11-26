@@ -106,7 +106,7 @@ function sigHTML(s, forCopy){
     L(j([A(s.web), A(s.linkUrl, s.linkLabel || '회사소개서 바로가기')], sep))];
   const text = `<td valign="middle" style="font-family:${FONT};font-size:13px;line-height:1.65;color:#555">${rows.join('')}</td>`;
   // 명함 위 구분선: 흰 여백 + 연하고 긴 가로줄 (그라데이션이 안 되는 메일 앱에서는 연한 회색 줄)
-  const top = inner => `<table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;width:100%;max-width:560px;font-family:${FONT}"><tr><td style="padding:10px 0 16px 0"><div style="height:1px;line-height:1px;font-size:0;background-color:#ececec;background-image:linear-gradient(90deg,#d6d6d6 0%,#e8e8e8 55%,rgba(255,255,255,0) 100%)">&nbsp;</div></td></tr><tr><td style="padding:0 0 14px 0">${inner}</td></tr></table>`;
+  const top = inner => `<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:${FONT}"><tr><td style="padding:10px 0 16px 0"><div style="height:1px;line-height:1px;font-size:0;background-color:#ececec;background-image:linear-gradient(90deg,#d6d6d6 0%,#e8e8e8 55%,rgba(255,255,255,0) 100%)">&nbsp;</div></td></tr><tr><td style="padding:0 0 14px 0">${inner}</td></tr></table>`;
   const lg = LOGOS.find(l => l.id === s.logo);
   if (!lg) return top(`<table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;font-family:${FONT}"><tr>${text}</tr></table>`);
   const h = s.layout === 'short' ? Math.round(s.logoH * 0.75) : s.logoH, w = Math.round(lg.w * h / lg.h);
@@ -148,7 +148,7 @@ function renderHome(){
   $('#mode').textContent = !canWrite ? '보기·복사 전용' : local ? '이 브라우저에만 저장돼요' : '';
   app.querySelectorAll('.card[data-id]').forEach(card => {
     const m = card.querySelector('.mini'), inner = m.firstElementChild;
-    const fit = () => { const s = Math.min(0.82, (m.clientWidth - 32) / Math.max(1, inner.scrollWidth)); inner.style.transform = `scale(${s})`; };
+    const fit = () => { const s = Math.min(0.82, (m.clientWidth - 32) / Math.max(1, inner.scrollWidth), (m.clientHeight - 16) / Math.max(1, inner.scrollHeight)); inner.style.transform = `scale(${s})`; };
     fit(); new ResizeObserver(fit).observe(m);
     card.addEventListener('click', e => { if (e.target.closest('button')) return; location.hash = 's-' + card.dataset.id; });
     card.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target === card) location.hash = 's-' + card.dataset.id; });
