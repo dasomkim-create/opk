@@ -217,7 +217,11 @@ function restore(i){
 }
 function undo(){ flushPend(); if (hi > 0) restore(hi - 1); }
 function redo(){ flushPend(); if (hi < hist.length - 1) restore(hi + 1); }
-function markDirty(){ if (!dirty) { dirty = true; setChip('dirty', '저장 안 됨'); const s = $('#save'); if (s) s.disabled = false; } }
+/* 자동 저장: 고치다 2.5초 멈추면 저장, 다른 탭 · 창으로 가도 저장. 저장 중에 또 고치면 끝난 뒤 다시 저장 */
+let editTick = 0, autoT = null;
+function scheduleAutosave(){ clearTimeout(autoT); if (!cur || !canWrite) return; autoT = setTimeout(() => { if (dirty && !saving) save(true); else if (dirty) scheduleAutosave(); }, 2500); }
+function markDirty(){ editTick++; if (!dirty) { dirty = true; setChip('dirty', '고치는 중…'); const s = $('#save'); if (s) s.disabled = false; } scheduleAutosave(); }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && cur && dirty && !saving && canWrite) save(true); });
 
 let fitPages = () => {}, thumbTimer;
 function refreshThumbs(){
@@ -1117,11 +1121,13 @@ function renderEditor(id){
   menu.querySelectorAll('[data-x]').forEach(b => b.onclick = () => { menu.classList.remove('open'); exportAs(b.dataset.x); });
 }
 document.addEventListener('click', () => { const m = $('#menu'); if (m) { m.classList.remove('open'); $('#expb')?.setAttribute('aria-expanded', false); } });
-async function save(){
+async function save(auto){
   if (!cur || saving || !canWrite) return;
-  flushPend(); saving = true; setChip('', '저장 중…');
+  clearTimeout(autoT); flushPend(); saving = true; setChip('', auto ? '자동 저장 중…' : '저장 중…'); const tick = editTick;
   const data = {name: ($('#tname').value.trim() || cur.name).slice(0, 120), party: cur.party || '', pages: currentPages(), updatedAt: new Date().toISOString()};
-  try { await persist(cur.id, data); if (!db) store[cur.id] = data; cur = {...cur, ...data}; dirty = false; setChip('', '저장됨'); $('#save').disabled = true; }
+  try { await persist(cur.id, data); if (!db) store[cur.id] = data; cur = {...cur, ...data};
+    if (tick === editTick) { dirty = false; const t = new Date(); setChip('', (auto ? '자동 저장됨 ' : '저장됨 ') + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0')); $('#save').disabled = true; }
+    else { setChip('dirty', '고치는 중…'); scheduleAutosave(); } }
   catch (e) { setChip('err', '저장 못 함'); toast(e?.code === 'quota_exceeded' ? '저장 공간이 가득 찼어요. 쓰지 않는 사본을 지워 주세요.' : e?.code === 'invalid_argument' ? '이 계정은 저장 권한이 없어요.' : '저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.'); }
   saving = false;
 }
@@ -1323,7 +1329,8 @@ async function makeDocx(){
 let pendingOpen = null; // 새로고침 · 링크로 계약서를 바로 열 때, 서버 자료가 올 때까지 기다릴 계약서
 async function route(){
   const m = location.hash.match(/^#c-([A-Za-z0-9-]+)$/);
-  if (cur && dirty && (!m || m[1] !== cur.id)) {
+  if (cur && dirty && (!m || m[1] !== cur.id) && canWrite) { if (saving) await new Promise(r => { const w = setInterval(() => { if (!saving) { clearInterval(w); r(); } }, 100); }); if (dirty) await save(true); } // 나갈 때는 묻지 않고 자동 저장
+  if (cur && dirty && (!m || m[1] !== cur.id)) { // 저장이 실패했을 때만 묻기
     const v = await ask('저장하지 않은 수정이 있어요', '저장하고 나갈까요?', [['취소', 'cancel', 'ghost'], ['저장 안 함', 'drop'], ['저장', 'save', 'pri']]);
     if (v === 'cancel') { history.replaceState(null, '', '#c-' + cur.id); return; }
     if (v === 'save') await save();
