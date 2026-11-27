@@ -42,7 +42,7 @@
     if (!d || !u) return; try { if (await u.canEdit() !== true) return; } catch { return; }
     dbx = d;
     const foot = document.querySelector('.nav .foot'); if (!foot) return;
-    const b = document.createElement('button'); b.className = 'thc'; b.style.display = 'block'; b.textContent = '백업'; b.title = '데이터 백업·옮기기'; b.setAttribute('aria-label', '데이터 백업·옮기기'); b.onclick = dlg;
+    const b = document.createElement('button'); b.className = 'thc bk'; b.textContent = '백업'; b.title = '데이터 백업·옮기기'; b.setAttribute('aria-label', '데이터 백업·옮기기'); b.onclick = dlg;
     foot.prepend(b);
   })();
 }

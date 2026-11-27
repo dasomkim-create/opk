@@ -939,7 +939,7 @@ function setEdit(on){
   flushPend(); const pages = currentPages(); editOn = on; mountPages(pages);
   const tg = $('#editTgl'); if (tg) { tg.setAttribute('aria-pressed', on); tg.lastChild.textContent = on ? '편집' : '보기'; }
   const f = $('#fmt'); if (f) f.hidden = !on;
-  if (!on) closeFP(); else if (fpPref('open', '1') === '1') openFP();
+  if (!on) closeFP(); else if (innerWidth > 800 && fpPref('open', '1') === '1') openFP();
   toast(on ? '편집을 켰어요. 글자를 눌러 고쳐요.' : '편집을 껐어요. 보기 모드예요.');
 }
 function renumArts(){
@@ -1110,7 +1110,7 @@ function renderEditor(id){
   $('#findb').onclick = openFind; bindFind();
   $('#fpb').onclick = () => { if ($('#fp') && !$('#fp').hidden) closeFP(); else openFP(); };
   closeFP(); try { if (localStorage.getItem('opk-side-off') === '1') sideToggle(true); } catch {}
-  setTimeout(() => { if (canWrite && editOn && fpPref('open', '1') === '1') openFP(); }, 0);
+  setTimeout(() => { if (canWrite && editOn && innerWidth > 800 && fpPref('open', '1') === '1') openFP(); }, 0);
   const sb = $('#save'); if (sb) sb.onclick = save;
   const ub = $('#undo'); if (ub) ub.onclick = undo; const rb = $('#redo'); if (rb) rb.onclick = redo;
   $('#keys').onclick = () => ask('쓰는 법', '■ 기본 흐름\n1. 「기본정보」에 계약일 · 당사자 · 금액을 적으면 계약서 곳곳에 함께 들어가요\n2. 줄을 누르고 고쳐 써요. 빈 곳을 누르면 새 줄이 생겨요\n3. 빈 줄에서 / 를 치거나 줄 왼쪽 + 를 누르면 블록 메뉴(2단 · 표 · 금액 박스 · 새 조항)\n4. 줄 왼쪽 ⋮⋮ 를 끌면 옮겨지고, 여러 줄을 드래그해서 고르면 Delete 로 한꺼번에 지워요\n5. 다 쓰면 저장 → 내보내기(PDF · 워드)\n\n■ 알아 두면 편한 것\n날짜 글자 한 번 클릭  달력에서 고르기\n글자를 드래그해 고르면  서식 툴바(굵게 · 크기 · 정렬 · 색 · 번호)\n표 칸 드래그 / Shift+클릭  칸 고르기 → 합치기(Ctrl+M)\n\n■ 단축키\nEnter  번호(1. ①) · 말머리표 다음 줄 이어 쓰기\nCtrl+C (선택 없이)  줄 전체 복사\nCtrl+V  복사한 줄을 아래에 붙이기\nCtrl+D 또는 Alt+클릭  줄 복제\nShift+Enter  같은 칸 안에서 줄바꿈\nBackspace  빈 번호 줄 지우기\nCtrl+Z  되돌리기\nCtrl+Shift+Z / Ctrl+Y  다시 하기\nCtrl+F  계약서 안에서 찾기\nCtrl+S  저장\nCtrl+B  굵게\nEsc  편집 끝내기\nCtrl+E  편집 켜기/끄기\nAlt+↑ / Alt+↓  이전·다음 쪽\nCtrl+Shift+E  PDF로 내보내기\n(Mac은 Ctrl 대신 ⌘)', [['닫기', true, 'pri']]);

@@ -182,10 +182,16 @@ async function duplicate(id){
 /* ---------- editor ---------- */
 const field = (k, label, ph, type = 'text') => `<label class="f"><span>${label}</span><input data-k="${k}" type="${type}" value="${esc(cur[k])}" placeholder="${esc(ph)}" ${canWrite ? '' : 'readonly'} autocomplete="off"></label>`;
 function setChip(state, text){ const ch = $('#chip'); if (!ch) return; ch.className = 'chip ' + state; ch.lastChild.textContent = text; }
-function markDirty(){ if (!canWrite) return; dirty = true; setChip('dirty', '저장 안 됨'); $('#save').disabled = false; }
+/* 11-27 자동 저장 (계약서와 같게): 고치다 2.5초 멈추면 · 다른 탭으로 가면 · 목록으로 나가면. 새 서명은 이름을 넣은 뒤부터 */
+let editTick = 0, autoT = null;
+const canAuto = () => cur && canWrite && (!cur.isNew || (cur.nameKo || cur.nameEn || '').trim());
+function scheduleAutosave(){ clearTimeout(autoT); if (!canAuto()) return; autoT = setTimeout(() => { if (dirty && !saving && canAuto()) save(true); else if (dirty) scheduleAutosave(); }, 2500); }
+function markDirty(){ if (!canWrite) return; editTick++; dirty = true; setChip('dirty', '고치는 중…'); $('#save').disabled = false; scheduleAutosave(); }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && dirty && !saving && canAuto()) save(true); });
+let sgPending = null;
 function renderEditor(id){
   const isNew = id === 'new';
-  if (!isNew && !sigs[id]) { location.hash = ''; return; }
+  if (!isNew && !sigs[id]) { if (!db && !window.__sgSettled) { sgPending = id; renderHome(); return; } location.hash = ''; return; } // 새로고침 · 링크: 서버 자료가 오면 그 서명으로
   cur = isNew ? cleanSig({...co, layout: co.layout, logo: co.logo, logoH: co.logoH}) : cleanSig(sigs[id]);
   cur.id = isNew ? 's' + Date.now().toString(36) : id; cur.isNew = isNew; dirty = isNew;
   app.innerHTML = `<div class="bar">
@@ -263,11 +269,12 @@ function paint(){
       : hosted ? '로고는 <b>공개 주소</b>로 들어가요. 받는 쪽 어디서나 보여요.'
       : '<b>로고 넣는 법 (비즈메카)</b><br>1. <b>로고 PNG 받기</b>로 로고 파일을 받아요 (서명 크기 그대로).<br>2. <b>서명 복사</b> → 비즈메카 서명 칸에 붙여 넣어요. 로고 자리에 <b>[로고 자리]</b> 글자가 들어가요.<br>3. 그 글자를 지우고 편집기의 <b>이미지 삽입</b>으로 받은 PNG를 올려요.<br><span style="opacity:.8">메일 서명은 로고를 메일 안에 직접 넣으면 지워져요. 회사 공통 정보에 로고 공개 주소를 넣어 두면 이 과정 없이 바로 붙어요.</span>');
 }
-async function save(){
+async function save(auto){
   if (!cur || saving || !canWrite) return;
-  saving = true; setChip('', '저장 중…');
+  clearTimeout(autoT); saving = true; setChip('', auto ? '자동 저장 중…' : '저장 중…'); const tick = editTick;
   const data = cleanSig({...cur, updatedAt: new Date().toISOString()});
-  try { await putSig(cur.id, data); if (!db) sigs[cur.id] = data; dirty = false; setChip('', '저장됨'); $('#save').disabled = true;
+  try { await putSig(cur.id, data); if (!db) sigs[cur.id] = data;
+    if (tick === editTick) { dirty = false; const t = new Date(); setChip('', (auto ? '자동 저장됨 ' : '저장됨 ') + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0')); $('#save').disabled = true; } else { setChip('dirty', '고치는 중…'); scheduleAutosave(); }
     if (cur.isNew) { cur.isNew = false; history.replaceState(null, '', '#s-' + cur.id); } }
   catch { setChip('err', '저장 못 함'); toast('저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.'); }
   saving = false;
@@ -346,7 +353,8 @@ function renderCompany(){
 async function route(){
   const h = location.hash.replace(/^#/, '');
   const m = h.match(/^s-([A-Za-z0-9-]+)$/);
-  if (cur && dirty && canWrite && (!m || m[1] !== cur.id)) {
+  if (cur && dirty && canAuto() && (!m || m[1] !== cur.id)) { if (saving) await new Promise(r => { const w = setInterval(() => { if (!saving) { clearInterval(w); r(); } }, 100); }); if (dirty) await save(true); } // 나갈 때는 묻지 않고 자동 저장
+  if (cur && dirty && canWrite && (!m || m[1] !== cur.id)) { // 저장 실패했거나 이름 없는 새 서명일 때만 묻기
     const v = await ask('저장하지 않은 수정이 있어요', '저장하고 나갈까요?', [['취소', 'cancel', 'ghost'], ['저장 안 함', 'drop'], ['저장', 'save', 'pri']]);
     if (v === 'cancel') { history.replaceState(null, '', '#s-' + (cur.isNew ? 'new' : cur.id)); return; }
     if (v === 'save') await save();
@@ -377,11 +385,12 @@ loadLocal(); route();
       clearTimeout(timer); const next = {};
       for (const doc of snap.docs) next[doc.id] = cleanSig(doc.data());
       sigs = next;
-      if (!cur && location.hash !== '#company') renderHome();
+      if (!cur && sgPending && sigs[sgPending]) { const id = sgPending; sgPending = null; if (location.hash !== '#s-' + id) history.replaceState(null, '', '#s-' + id); renderEditor(id); }
+      else if (!cur && location.hash !== '#company') renderHome();
       else if (cur && first && !dirty && !cur.isNew) renderEditor(cur.id);
-      first = false;
-    }, () => { clearTimeout(timer); toast('저장소에 연결하지 못했어요. 이 브라우저에만 저장돼요.'); db = null; local = true; loadLocal(); if (!cur) renderHome(); });
+      first = false; window.__sgSettled = true; sgPending = null;
+    }, () => { clearTimeout(timer); window.__sgSettled = true; toast('저장소에 연결하지 못했어요. 이 브라우저에만 저장돼요.'); db = null; local = true; loadLocal(); if (!cur) renderHome(); });
     db.doc('settings/company').onSnapshot(doc => { let v = null; try { v = doc?.data?.() || null; } catch {} if (v) { co = {...DEF_CO, ...v, urls: {...(v.urls || {})}}; co.logo = normLogo(co.logo); } if (cur) paint(); }, () => {});
-  } else if (!cur) route();
+  } else { window.__sgSettled = true; if (!cur) route(); }
 })();
 }

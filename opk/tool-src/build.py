@@ -120,6 +120,7 @@ body.navmin .nav .logo>svg,body.navmin .nav .logo b,body.navmin .nav a span,body
 body.navmin .navtg{margin:0}
 body.navmin .nav a{justify-content:center;padding:0}
 body.navmin .thc{display:block}
+.nav .foot .bk{display:block}
 body.navmin .main{margin-left:64px}
 @media(prefers-reduced-motion:reduce){.main,.nav,.navtg svg{transition:none}}
 .main .brand svg{display:none}
@@ -213,6 +214,7 @@ body.navmin .main{margin-left:64px}
  .nav .foot{margin:0}.theme{width:132px}
  .main,body.navmin .main{margin-left:0;padding-bottom:64px}
  .navtg,body.navmin .thc{display:none}
+  .nav .foot .bk{display:none} /* 11-27: 폰 아래 막대에 자리가 없어 「백업」이 위로 삐져나와 화면을 가렸음 — 폰에서는 숨김(컴퓨터에서 백업) */
  body.navmin .nav{width:auto;padding:6px 8px}
  body.navmin .nav a span,body.navmin .theme{display:revert}
  body.navmin .nav a{flex-direction:column;padding:0 4px}

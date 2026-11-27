@@ -66,6 +66,7 @@ body.navmin .nav .logo>svg,body.navmin .nav .logo b,body.navmin .nav a span,body
 body.navmin .navtg{margin:0}
 body.navmin .nav a{justify-content:center;padding:0}
 body.navmin .thc{display:block}
+.nav .foot .bk{display:block}
 body.navmin .main{margin-left:64px}
 @media(prefers-reduced-motion:reduce){.main,.nav,.navtg svg{transition:none}}
 .main .brand svg{display:none}
@@ -159,6 +160,7 @@ body.navmin .main{margin-left:64px}
  .nav .foot{margin:0}.theme{width:132px}
  .main,body.navmin .main{margin-left:0;padding-bottom:64px}
  .navtg,body.navmin .thc{display:none}
+  .nav .foot .bk{display:none} /* 11-27: 폰 아래 막대에 자리가 없어 「백업」이 위로 삐져나와 화면을 가렸음 — 폰에서는 숨김(컴퓨터에서 백업) */
  body.navmin .nav{width:auto;padding:6px 8px}
  body.navmin .nav a span,body.navmin .theme{display:revert}
  body.navmin .nav a{flex-direction:column;padding:0 4px}
@@ -1498,7 +1500,7 @@ function setEdit(on){
   flushPend(); const pages = currentPages(); editOn = on; mountPages(pages);
   const tg = $('#editTgl'); if (tg) { tg.setAttribute('aria-pressed', on); tg.lastChild.textContent = on ? '편집' : '보기'; }
   const f = $('#fmt'); if (f) f.hidden = !on;
-  if (!on) closeFP(); else if (fpPref('open', '1') === '1') openFP();
+  if (!on) closeFP(); else if (innerWidth > 800 && fpPref('open', '1') === '1') openFP();
   toast(on ? '편집을 켰어요. 글자를 눌러 고쳐요.' : '편집을 껐어요. 보기 모드예요.');
 }
 function renumArts(){
@@ -1710,7 +1712,7 @@ function renderEditor(id){
   $('#lang').onclick = e => { const b = e.target.closest('[data-lg]'); if (b) switchLang(b.dataset.lg); }; updLang();
   $('#fpb').onclick = () => { if ($('#fp') && !$('#fp').hidden) closeFP(); else openFP(); };
   closeFP(); try { if (localStorage.getItem('opk-side-off') === '1') sideToggle(true); } catch {}
-  setTimeout(() => { if (canWrite && editOn && fpPref('open', '1') === '1') openFP(); }, 0);
+  setTimeout(() => { if (canWrite && editOn && innerWidth > 800 && fpPref('open', '1') === '1') openFP(); }, 0);
   const sb = $('#save'); if (sb) sb.onclick = save;
   const ub = $('#undo'); if (ub) ub.onclick = undo; const rb = $('#redo'); if (rb) rb.onclick = redo;
   $('#keys').onclick = () => ask('쓰는 법', '■ 기본 흐름\n1. 「기본정보」에 계약일 · 당사자 · 금액을 적으면 계약서 곳곳에 함께 들어가요\n2. 줄을 누르고 고쳐 써요. 빈 곳을 누르면 새 줄이 생겨요\n3. 빈 줄에서 / 를 치거나 줄 왼쪽 + 를 누르면 블록 메뉴(2단 · 표 · 금액 박스 · 새 조항)\n4. 줄 왼쪽 ⋮⋮ 를 끌면 옮겨지고, 여러 줄을 드래그해서 고르면 Delete 로 한꺼번에 지워요\n5. 다 쓰면 저장 → 내보내기(PDF · 워드)\n\n■ 알아 두면 편한 것\n날짜 글자 한 번 클릭  달력에서 고르기\n글자를 드래그해 고르면  서식 툴바(굵게 · 크기 · 정렬 · 색 · 번호)\n표 칸 드래그 / Shift+클릭  칸 고르기 → 합치기(Ctrl+M)\n\n■ 단축키\nEnter  번호(1. ①) · 말머리표 다음 줄 이어 쓰기\nCtrl+C (선택 없이)  줄 전체 복사\nCtrl+V  복사한 줄을 아래에 붙이기\nCtrl+D 또는 Alt+클릭  줄 복제\nShift+Enter  같은 칸 안에서 줄바꿈\nBackspace  빈 번호 줄 지우기\nCtrl+Z  되돌리기\nCtrl+Shift+Z / Ctrl+Y  다시 하기\nCtrl+F  계약서 안에서 찾기\nCtrl+S  저장\nCtrl+B  굵게\nEsc  편집 끝내기\nCtrl+E  편집 켜기/끄기\nAlt+↑ / Alt+↓  이전·다음 쪽\nCtrl+Shift+E  PDF로 내보내기\n(Mac은 Ctrl 대신 ⌘)', [['닫기', true, 'pri']]);
@@ -2584,10 +2586,16 @@ async function duplicate(id){
 /* ---------- editor ---------- */
 const field = (k, label, ph, type = 'text') => `<label class="f"><span>${label}</span><input data-k="${k}" type="${type}" value="${esc(cur[k])}" placeholder="${esc(ph)}" ${canWrite ? '' : 'readonly'} autocomplete="off"></label>`;
 function setChip(state, text){ const ch = $('#chip'); if (!ch) return; ch.className = 'chip ' + state; ch.lastChild.textContent = text; }
-function markDirty(){ if (!canWrite) return; dirty = true; setChip('dirty', '저장 안 됨'); $('#save').disabled = false; }
+/* 11-27 자동 저장 (계약서와 같게): 고치다 2.5초 멈추면 · 다른 탭으로 가면 · 목록으로 나가면. 새 서명은 이름을 넣은 뒤부터 */
+let editTick = 0, autoT = null;
+const canAuto = () => cur && canWrite && (!cur.isNew || (cur.nameKo || cur.nameEn || '').trim());
+function scheduleAutosave(){ clearTimeout(autoT); if (!canAuto()) return; autoT = setTimeout(() => { if (dirty && !saving && canAuto()) save(true); else if (dirty) scheduleAutosave(); }, 2500); }
+function markDirty(){ if (!canWrite) return; editTick++; dirty = true; setChip('dirty', '고치는 중…'); $('#save').disabled = false; scheduleAutosave(); }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden' && dirty && !saving && canAuto()) save(true); });
+let sgPending = null;
 function renderEditor(id){
   const isNew = id === 'new';
-  if (!isNew && !sigs[id]) { location.hash = 'sign'; return; }
+  if (!isNew && !sigs[id]) { if (!db && !window.__sgSettled) { sgPending = id; renderHome(); return; } location.hash = 'sign'; return; } // 새로고침 · 링크: 서버 자료가 오면 그 서명으로
   cur = isNew ? cleanSig({...co, layout: co.layout, logo: co.logo, logoH: co.logoH}) : cleanSig(sigs[id]);
   cur.id = isNew ? 's' + Date.now().toString(36) : id; cur.isNew = isNew; dirty = isNew;
   app.innerHTML = `<div class="bar">
@@ -2677,11 +2685,12 @@ function paint(){
       : hosted ? '로고는 <b>공개 주소</b>로 들어가요. 받는 쪽 어디서나 보여요.'
       : '<b>로고 넣는 법 (비즈메카)</b><br>1. <b>로고 PNG 받기</b>로 로고 파일을 받아요 (서명 크기 그대로).<br>2. <b>서명 복사</b> → 비즈메카 서명 칸에 붙여 넣어요. 로고 자리에 <b>[로고 자리]</b> 글자가 들어가요.<br>3. 그 글자를 지우고 편집기의 <b>이미지 삽입</b>으로 받은 PNG를 올려요.<br><span style="opacity:.8">메일 서명은 로고를 메일 안에 직접 넣으면 지워져요. 회사 공통 정보에 로고 공개 주소를 넣어 두면 이 과정 없이 바로 붙어요.</span>');
 }
-async function save(){
+async function save(auto){
   if (!cur || saving || !canWrite) return;
-  saving = true; setChip('', '저장 중…');
+  clearTimeout(autoT); saving = true; setChip('', auto ? '자동 저장 중…' : '저장 중…'); const tick = editTick;
   const data = cleanSig({...cur, updatedAt: new Date().toISOString()});
-  try { await putSig(cur.id, data); if (!db) sigs[cur.id] = data; dirty = false; setChip('', '저장됨'); $('#save').disabled = true;
+  try { await putSig(cur.id, data); if (!db) sigs[cur.id] = data;
+    if (tick === editTick) { dirty = false; const t = new Date(); setChip('', (auto ? '자동 저장됨 ' : '저장됨 ') + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0')); $('#save').disabled = true; } else { setChip('dirty', '고치는 중…'); scheduleAutosave(); }
     if (cur.isNew) { cur.isNew = false; history.replaceState(null, '', '#s-' + cur.id); } }
   catch { setChip('err', '저장 못 함'); toast('저장하지 못했어요. 잠시 뒤 다시 눌러 주세요.'); }
   saving = false;
@@ -2850,7 +2859,8 @@ async function route(){
   if (!active()) return;
   const h = location.hash.replace(/^#/, '');
   const m = h.match(/^s-([A-Za-z0-9-]+)$/);
-  if (cur && dirty && canWrite && (!m || (m[1] !== cur.id && !(cur.isNew && m[1] === 'new')))) {
+  if (cur && dirty && canAuto() && (!m || m[1] !== cur.id)) { if (saving) await new Promise(r => { const w = setInterval(() => { if (!saving) { clearInterval(w); r(); } }, 100); }); if (dirty) await save(true); } // 나갈 때는 묻지 않고 자동 저장
+  if (cur && dirty && canWrite && (!m || (m[1] !== cur.id && !(cur.isNew && m[1] === 'new')))) { // 저장 실패했거나 이름 없는 새 서명일 때만 묻기
     const v = await ask('저장하지 않은 수정이 있어요', '저장하고 나갈까요?', [['취소', 'cancel', 'ghost'], ['저장 안 함', 'drop'], ['저장', 'save', 'pri']]);
     if (v === 'cancel') { history.replaceState(null, '', '#s-' + (cur.isNew ? 'new' : cur.id)); return; }
     if (v === 'save') await save();
@@ -2883,12 +2893,13 @@ loadLocal(); route();
       clearTimeout(timer); const next = {};
       for (const doc of snap.docs) next[doc.id] = cleanSig(doc.data());
       sigs = next;
-      if (!cur && location.hash !== '#company' && active()) renderHome();
+      if (!cur && sgPending && sigs[sgPending]) { const id = sgPending; sgPending = null; if (location.hash !== '#s-' + id) history.replaceState(null, '', '#s-' + id); renderEditor(id); }
+      else if (!cur && location.hash !== '#company' && active()) renderHome();
       else if (cur && first && !dirty && !cur.isNew) renderEditor(cur.id);
-      first = false;
-    }, () => { clearTimeout(timer); toast('저장소에 연결하지 못했어요. 이 브라우저에만 저장돼요.'); db = null; local = true; loadLocal(); if (!cur) renderHome(); });
+      first = false; window.__sgSettled = true; sgPending = null;
+    }, () => { clearTimeout(timer); window.__sgSettled = true; toast('저장소에 연결하지 못했어요. 이 브라우저에만 저장돼요.'); db = null; local = true; loadLocal(); if (!cur) renderHome(); });
     db.doc('settings/company').onSnapshot(doc => { let v = null; try { v = doc?.data?.() || null; } catch {} if (v) { co = {...DEF_CO, ...v, urls: {...(v.urls || {})}}; co.logo = normLogo(co.logo); } if (cur) paint(); }, () => {});
-  } else if (!cur) route();
+  } else { window.__sgSettled = true; if (!cur) route(); }
 })();
 }
 </script>
@@ -2974,7 +2985,7 @@ loadLocal(); route();
     if (!d || !u) return; try { if (await u.canEdit() !== true) return; } catch { return; }
     dbx = d;
     const foot = document.querySelector('.nav .foot'); if (!foot) return;
-    const b = document.createElement('button'); b.className = 'thc'; b.style.display = 'block'; b.textContent = '백업'; b.title = '데이터 백업·옮기기'; b.setAttribute('aria-label', '데이터 백업·옮기기'); b.onclick = dlg;
+    const b = document.createElement('button'); b.className = 'thc bk'; b.textContent = '백업'; b.title = '데이터 백업·옮기기'; b.setAttribute('aria-label', '데이터 백업·옮기기'); b.onclick = dlg;
     foot.prepend(b);
   })();
 }
