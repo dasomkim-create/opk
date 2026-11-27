@@ -376,7 +376,7 @@ async function createFromPhoto(){
     const pages = buildContract(d);
     const nid = 'c' + Date.now().toString(36);
     const data = {name: String(d.title || '새 계약서').slice(0, 120), party: nameOf(d.contractor), pages, en: [], zh: [], updatedAt: new Date().toISOString()};
-    await persist(nid, data); if (!db) store[nid] = data;
+    await persist(nid, data); store[nid] = data;
     busy(false); location.hash = 'c-' + nid;
     toast('사진 내용으로 새 계약서를 만들었어요. 금액·이름·계좌를 원본과 꼭 대조해 주세요.');
   } catch (e) { busy(false); $('#exp').innerHTML = ''; toast(e?.code === 'rate_limited' ? '요청이 많아요. 잠시 뒤 다시 해 주세요.' : e?.code === 'not_granted' ? 'AI 사용이 허용되지 않았어요.' : '사진을 읽지 못했어요. 더 밝고 반듯한 사진으로 다시 해 주세요.'); console.error(e); }

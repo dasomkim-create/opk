@@ -46,8 +46,8 @@ function toast(msg, html){ const t = $('#toast'); if (html) t.innerHTML = msg; e
 function ask(title, text, buttons){
   return new Promise(res => {
     $('#mtitle').textContent = title; $('#mtext').textContent = text;
-    const row = $('#mrow'); row.innerHTML = '';
-    buttons.forEach(([label, val, cls]) => { const b = document.createElement('button'); b.className = 'btn ' + (cls || ''); b.textContent = label; b.onclick = () => { $('#modal').classList.remove('show'); res(val); }; row.appendChild(b); });
+    const row = $('#mrow'); row.innerHTML = ''; row.classList.toggle('opts', buttons.some(b => b[3]));
+    buttons.forEach(([label, val, cls, desc]) => { const b = document.createElement('button'); b.className = 'btn ' + (cls || ''); if (desc) { b.innerHTML = '<b></b><small></small>'; b.firstChild.textContent = label; b.lastChild.textContent = desc; } else b.textContent = label; b.onclick = () => { $('#modal').classList.remove('show'); res(val); }; row.appendChild(b); });
     $('#modal').classList.add('show'); row.lastChild.focus();
   });
 }
@@ -162,14 +162,14 @@ function blankPage(){
 async function createBlank(){
   const nid = 'c' + Date.now().toString(36);
   const data = {name: '새 계약서', party: '', pages: [sanitizePage(blankPage())], updatedAt: new Date().toISOString()};
-  try { await persist(nid, data); if (!db) store[nid] = data; location.hash = 'c-' + nid; }
+  try { await persist(nid, data); store[nid] = data; location.hash = 'c-' + nid; } // 서버 저장소여도 바로 목록에 넣어 곧장 편집 화면으로 (예전엔 서버가 돌려줄 때까지 못 찾아 목록에 남았음)
   catch (e) { toast('새 계약서를 만들지 못했어요. 잠시 뒤 다시 해 주세요.'); }
 }
 async function duplicate(id){
   const src = get(id); if (!src) return;
   const nid = 'c' + Date.now().toString(36);
   const data = {name: src.name + ' 사본', party: src.party || '', pages: src.pages.map(sanitizePage), updatedAt: new Date().toISOString()};
-  try { await persist(nid, data); if (!db) store[nid] = data; location.hash = 'c-' + nid; }
+  try { await persist(nid, data); store[nid] = data; location.hash = 'c-' + nid; } // 서버 저장소여도 바로 목록에 넣어 곧장 편집 화면으로 (예전엔 서버가 돌려줄 때까지 못 찾아 목록에 남았음)
   catch (e) { toast(e?.code === 'quota_exceeded' ? '저장 공간이 가득 찼어요. 쓰지 않는 사본을 지워 주세요.' : '사본을 만들지 못했어요. 잠시 뒤 다시 해 주세요.'); }
 }
 async function remove(id){
@@ -558,7 +558,7 @@ function fpRow(key, s){
   const cnt = `<span class="fp-locs">${[...seen].map(([l, i]) => `<button type="button" class="fp-loc" data-k="${escA(key)}" data-i="${i}" title="계약서에서 보기">${escA(l)}</button>`).join('')}</span>`;
   if (s[0].type === 'date') { const d = s[0].get(); return `<div class="fp-row" data-k="${escA(key)}"><label><span>${lab}</span>${cnt}</label><button type="button" class="fp-in fp-date" data-k="${escA(key)}">${d ? fmtD(d, 'dot') : '<em>날짜 고르기</em>'}<svg viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="4.5" width="14" height="12.5" rx="2"/><path d="M3 8.5h14M7 2.5v4M13 2.5v4"/></svg></button></div>`; }
   const v = s[0].get(), money = s[0].type === 'money';
-  return `<div class="fp-row" data-k="${escA(key)}"><label><span>${lab}</span>${cnt}</label><input class="fp-in" data-k="${escA(key)}"${money ? ' inputmode="numeric"' : ''} value="${escA(v)}" aria-label="${lab}">${money ? '<i class="fp-unit">원</i>' : ''}</div>`;
+  return `<div class="fp-row" data-k="${escA(key)}"><label><span>${lab}</span>${cnt}</label><input class="fp-in" data-k="${escA(key)}"${money ? ' inputmode="numeric"' : ''} value="${escA(v)}" aria-label="${lab}" placeholder="${money ? "0" : "입력"}">${money ? '<i class="fp-unit">원</i>' : ''}</div>`;
 }
 function renderFP(){
   const p = $('#fp'); if (!p || p.hidden) return;
@@ -998,11 +998,11 @@ function mountPages(pages){
 }
 
 function renderEditor(id){
-  const c = get(id); if (!c) { location.hash = ''; return; }
+  const c = get(id); if (!c) { if (!db && !window.__dbSettled) { pendingOpen = id; renderHome(); return; } location.hash = ''; return; } // 처음 열 때 서버 자료가 오기 전이면 기다렸다가 그 계약서로
   cur = {...c, pages: c.pages.slice()}; dirty = false; hist = []; hi = -1; tblCell = null;
   app.innerHTML = `<div class="bar">
     <button class="btn ghost" id="back" aria-label="목록으로">← 목록</button>
-    <input class="title-in" id="tname" value="${esc(c.name)}" aria-label="계약서 이름" ${canWrite ? '' : 'readonly'}>
+    <input class="title-in" id="tname" value="${esc(c.name)}" aria-label="계약서 이름" placeholder="계약서 이름" title="눌러서 이름 바꾸기" ${canWrite ? '' : 'readonly'}>
     <span class="chip" id="chip"><i></i><span>${canWrite ? '저장됨' : '보기 전용'}</span></span>
     <span style="margin-left:auto"></span>
     ${canWrite ? `<div class="fmt" id="fmt" role="group" aria-label="글자 서식"><button class="btn icon" data-al="left" title="왼쪽 정렬" aria-label="왼쪽 정렬"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 9h9M3 13h14M3 17h9"/></svg></button><button class="btn icon" data-al="center" title="가운데 정렬" aria-label="가운데 정렬"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M5.5 9h9M3 13h14M5.5 17h9"/></svg></button><button class="btn icon" data-al="right" title="오른쪽 정렬" aria-label="오른쪽 정렬"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M8 9h9M3 13h14M8 17h9"/></svg></button><button class="btn icon" data-bold title="굵게 (Ctrl+B)" aria-label="굵게" style="font-weight:800">B</button></div>
@@ -1017,7 +1017,7 @@ function renderEditor(id){
       </div></div>
     <button class="btn" id="fpb" aria-pressed="false" title="기본정보 — 한 번 적으면 계약서의 같은 칸이 모두 채워져요"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h10M4 17h7"/><path d="M15 17h5" stroke-dasharray="2 2"/></svg>기본정보</button>
     <button class="btn icon" id="findb" title="찾기 (Ctrl+F)" aria-label="찾기"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
-    <button class="btn icon ghost" id="keys" title="단축키" aria-label="단축키 보기">?</button>
+    <button class="btn icon ghost" id="keys" title="쓰는 법 · 단축키" aria-label="쓰는 법 · 단축키 보기">?</button>
   </div>
   <div class="ed">
     <nav class="side" id="side" aria-label="쪽 목록"></nav>
@@ -1100,6 +1100,8 @@ function renderEditor(id){
   }); }
   const tg = $('#editTgl'); if (tg) tg.onclick = () => setEdit(!editOn);
   $('#tname').addEventListener('input', markDirty);
+  { let lastH1 = (document.querySelector('#desk h1')?.textContent || '').trim();
+    desk.addEventListener('input', e => { const h = e.target.closest && e.target.closest('h1'); if (!h) return; const t = $('#tname'), now = h.textContent.trim(); if (t && now && (t.value.trim() === '새 계약서' || t.value.trim() === lastH1)) t.value = now; lastH1 = now; }); }
   $('#back').onclick = () => { location.hash = ''; };
   $('#findb').onclick = openFind; bindFind();
   $('#fpb').onclick = () => { if ($('#fp') && !$('#fp').hidden) closeFP(); else openFP(); };
@@ -1107,9 +1109,11 @@ function renderEditor(id){
   setTimeout(() => { if (canWrite && editOn && fpPref('open', '1') === '1') openFP(); }, 0);
   const sb = $('#save'); if (sb) sb.onclick = save;
   const ub = $('#undo'); if (ub) ub.onclick = undo; const rb = $('#redo'); if (rb) rb.onclick = redo;
-  $('#keys').onclick = () => ask('단축키', 'Enter  번호(1. ①)·말머리표(● ○ •) 다음 줄 추가\n여러 줄 드래그 → Delete  고른 줄 한꺼번에 지우기\n표 칸 드래그 / Shift+클릭  칸 고르기 → Ctrl+M 합치기\n날짜 글자 두 번 클릭  달력에서 날짜 고르기\nCtrl+C (선택 없이)  줄 전체 복사\nCtrl+V  복사한 줄을 아래에 붙이기\nCtrl+D 또는 Alt+클릭  줄 복제\nShift+Enter  같은 칸 안에서 줄바꿈\nBackspace  빈 번호 줄 지우기\nCtrl+Z  되돌리기\nCtrl+Shift+Z / Ctrl+Y  다시 하기\nCtrl+F  계약서 안에서 찾기\nCtrl+S  저장\nCtrl+B  굵게\nEsc  편집 끝내기\nCtrl+E  편집 켜기/끄기\nAlt+↑ / Alt+↓  이전·다음 쪽\nCtrl+Shift+E  PDF로 내보내기\n(Mac은 Ctrl 대신 ⌘)', [['닫기', true, 'pri']]);
+  $('#keys').onclick = () => ask('쓰는 법', '■ 기본 흐름\n1. 「기본정보」에 계약일 · 당사자 · 금액을 적으면 계약서 곳곳에 함께 들어가요\n2. 줄을 누르고 고쳐 써요. 빈 곳을 누르면 새 줄이 생겨요\n3. 빈 줄에서 / 를 치거나 줄 왼쪽 + 를 누르면 블록 메뉴(2단 · 표 · 금액 박스 · 새 조항)\n4. 줄 왼쪽 ⋮⋮ 를 끌면 옮겨지고, 여러 줄을 드래그해서 고르면 Delete 로 한꺼번에 지워요\n5. 다 쓰면 저장 → 내보내기(PDF · 워드)\n\n■ 알아 두면 편한 것\n날짜 글자 한 번 클릭  달력에서 고르기\n글자를 드래그해 고르면  서식 툴바(굵게 · 크기 · 정렬 · 색 · 번호)\n표 칸 드래그 / Shift+클릭  칸 고르기 → 합치기(Ctrl+M)\n\n■ 단축키\nEnter  번호(1. ①) · 말머리표 다음 줄 이어 쓰기\nCtrl+C (선택 없이)  줄 전체 복사\nCtrl+V  복사한 줄을 아래에 붙이기\nCtrl+D 또는 Alt+클릭  줄 복제\nShift+Enter  같은 칸 안에서 줄바꿈\nBackspace  빈 번호 줄 지우기\nCtrl+Z  되돌리기\nCtrl+Shift+Z / Ctrl+Y  다시 하기\nCtrl+F  계약서 안에서 찾기\nCtrl+S  저장\nCtrl+B  굵게\nEsc  편집 끝내기\nCtrl+E  편집 켜기/끄기\nAlt+↑ / Alt+↓  이전·다음 쪽\nCtrl+Shift+E  PDF로 내보내기\n(Mac은 Ctrl 대신 ⌘)', [['닫기', true, 'pri']]);
   const menu = $('#menu'), eb = $('#expb');
-  eb.onclick = e => { e.stopPropagation(); const o = menu.classList.toggle('open'); eb.setAttribute('aria-expanded', o); };
+  eb.onclick = e => { e.stopPropagation(); const o = menu.classList.toggle('open'); eb.setAttribute('aria-expanded', o);
+    // 버튼이 화면 왼쪽이면 오른쪽으로, 오른쪽 끝이면 왼쪽으로 펼쳐서 메뉴가 잘리지 않게
+    if (o) { const ml = menu.querySelector('.menu-list'); ml.style.left = '0'; ml.style.right = 'auto'; const r = ml.getBoundingClientRect(); if (r.right > innerWidth - 8) { ml.style.left = 'auto'; ml.style.right = '0'; } } };
   menu.querySelectorAll('[data-x]').forEach(b => b.onclick = () => { menu.classList.remove('open'); exportAs(b.dataset.x); });
 }
 document.addEventListener('click', () => { const m = $('#menu'); if (m) { m.classList.remove('open'); $('#expb')?.setAttribute('aria-expanded', false); } });
@@ -1316,6 +1320,7 @@ async function makeDocx(){
 }
 
 /* ---------- routing & boot ---------- */
+let pendingOpen = null; // 새로고침 · 링크로 계약서를 바로 열 때, 서버 자료가 올 때까지 기다릴 계약서
 async function route(){
   const m = location.hash.match(/^#c-([A-Za-z0-9-]+)$/);
   if (cur && dirty && (!m || m[1] !== cur.id)) {
@@ -1339,7 +1344,9 @@ loadLocal(); local = true; route();
       clearTimeout(timer);
       const next = {}; for (const doc of snap.docs) { const v = doc.data(); if (v && Array.isArray(v.pages)) next[doc.id] = {name: String(v.name || '계약서'), party: String(v.party || ''), pages: v.pages.map(sanitizePage).filter(Boolean), updatedAt: v.updatedAt}; }
       store = next;
-      if (!cur) renderHome(); else if (first && !dirty) renderEditor(cur.id);
+      if (!cur && pendingOpen && store[pendingOpen]) { const id = pendingOpen; pendingOpen = null; if (location.hash !== '#c-' + id) history.replaceState(null, '', '#c-' + id); renderEditor(id); }
+      else if (!cur) renderHome(); else if (first && !dirty) renderEditor(cur.id);
+      window.__dbSettled = true; pendingOpen = null;
       first = false;
     }, () => { clearTimeout(timer); toast('저장소에 연결하지 못했어요. 이 브라우저에만 저장돼요.'); db = null; local = true; loadLocal(); if (!cur) renderHome(); });
   } else if (!cur) renderHome();

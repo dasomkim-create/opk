@@ -243,13 +243,14 @@ assert 'return TPL.Blank' in ct
 ct = rep(ct, "location.hash = ''", "location.hash = 'contracts'", count=2, name='hash')
 ct = rep(ct, "next[doc.id] = {name: String(v.name || '계약서'), party: String(v.party || ''), pages: v.pages.map(sanitizePage).filter(Boolean), updatedAt: v.updatedAt};",
  "next[doc.id] = {name: String(v.name || '계약서'), party: String(v.party || ''), base: v.base === true, pages: v.pages.map(sanitizePage).filter(Boolean), en: Array.isArray(v.en) ? v.en.map(sanitizePage).filter(Boolean) : [], zh: Array.isArray(v.zh) ? v.zh.map(sanitizePage).filter(Boolean) : [], updatedAt: v.updatedAt};", name='snap')
-ct = rep(ct, "      store = next;\n      if (!cur) renderHome(); else if (first && !dirty) renderEditor(cur.id);",
- "      store = next; window.OPK?.contractsAllowed();\n      if (!cur) { if (active()) renderHome(); } else if (first && !dirty && lang === 'ko') renderEditor(cur.id);", name='snaprender')
+ct = rep(ct, "      store = next;\n      if (!cur && pendingOpen", "      store = next; window.OPK?.contractsAllowed();\n      if (!cur && pendingOpen", name='snaprender0')
+ct = rep(ct, "      else if (!cur) renderHome(); else if (first && !dirty) renderEditor(cur.id);",
+ "      else if (!cur) { if (active()) renderHome(); } else if (first && !dirty && lang === 'ko') renderEditor(cur.id);", name='snaprender')
 ct = rep(ct, "}, () => { clearTimeout(timer); toast('저장소에 연결하지 못했어요. 이 브라우저에만 저장돼요.'); db = null; local = true; loadLocal(); if (!cur) renderHome(); });",
  "}, () => { clearTimeout(timer); db = null; store = {}; window.OPK?.contractsDenied(); });", name='snaperr')
 ct = rep(ct, "  if (d) {\n    db = d; local = false; store = {};\n    let first = true; const timer",
  "  if (u && u.canEdit) { try { if (await u.canEdit() === false) { canWrite = false; window.OPK?.contractsDenied(); return; } } catch {} }\n  if (d) {\n    db = d; local = false; store = {};\n    let first = true; const timer", name='admin')
-ct = rep(ct, "  } else if (!cur) renderHome();\n  setMode();", "  } else if (window.claude?.use) { window.OPK?.contractsDenied(); return; } else { window.OPK?.contractsAllowed(); if (!cur && active()) renderHome(); }\n  setMode();", name='nodb')
+ct = rep(ct, "  } else if (!cur) renderHome();\n  setMode();", "  } else if (window.claude?.use) { window.OPK?.contractsDenied(); return; } else { window.__dbSettled = true; window.OPK?.contractsAllowed(); if (!cur && pendingOpen && get(pendingOpen)) { const id = pendingOpen; pendingOpen = null; renderEditor(id); } else if (!cur && active()) renderHome(); }\n  setMode();", name='nodb')
 ct = rep(ct, "  const m = location.hash.match(/^#c-([A-Za-z0-9-]+)$/);\n  if (cur && dirty",
  "  if (!active()) return;\n  const m = location.hash.match(/^#c-([A-Za-z0-9-]+)$/);\n  if (cur && dirty", name='route')
 ct = rep(ct, "  if (m) renderEditor(m[1]); else renderHome();\n}",
@@ -346,9 +347,10 @@ ct = rep(ct, """  const tt = $('#tt'); tt.hidden = false;
 }""", name='tt2ftb')
 ct = rep(ct, "    const hdr = np.querySelector('header'); const sec = anySec ? emptySection(anySec) : null;\n    if (sec) (hdr ? hdr.after(sec) : np.prepend(sec));",
  "    const hdr = np.querySelector('header'); const sec = anySec ? emptySection(anySec) : null;\n    if (sec) (hdr ? hdr.after(sec) : np.prepend(sec));\n    const sigBlk = [...last.children].find(ch => ch.tagName === 'DIV' && ch.querySelectorAll('table').length >= 2 && /\\(인\\)/.test(ch.textContent));\n    if (sigBlk) { const foot = [...np.children].find(ch => ch.tagName === 'P' && ch.querySelectorAll('span').length >= 2 && /\\d+\\s*\\/\\s*\\d+\\s*$/.test(ch.textContent)); np.insertBefore(sigBlk, foot || null); }", name='sigmove')
-ct = rep(ct, "[['취소', null, 'ghost'], ['빈 계약서', '__blank'], ...list()", "[['취소', null, 'ghost'], ['사진으로 만들기', '__photo', 'pri'], ['빈 계약서', '__blank'], ...list()", name='photoopt')
+# 11-27 사용성: 고르는 것마다 한 줄 설명이 붙은 세로 목록, 취소는 맨 아래 따로
+ct = rep(ct, "[['취소', null, 'ghost'], ['빈 계약서', '__blank'], ...list().filter(c => c.base).map(c => [c.name + ' 사본', c.id])]", "[['사진으로 만들기', '__photo', 'opt', '계약서 사진을 올리면 AI가 읽어 OPK 양식으로 만들어요'], ['빈 계약서', '__blank', 'opt', '제목 · 당사자 · 서명란만 있는 새 양식에서 시작해요'], ...list().filter(c => c.base).map(c => [c.name + ' 사본', c.id, 'opt', '이 예시 양식을 그대로 복사해서 고쳐 써요']), ['취소', null, 'ghost']]", name='photoopt')
 ct = rep(ct, "  if (v === '__blank') createBlank(); else if (v) duplicate(v);", "  if (v === '__photo') createFromPhoto(); else if (v === '__blank') createBlank(); else if (v) duplicate(v);", name='photorun')
-ct = ct.replace("'빈 계약서는 제목·당사자·서명란만 있는 새 양식이에요. 조항은 편집 화면에서 더해요.'", "'사진으로 만들기: 계약서 사진을 올리면 AI가 내용을 읽어 OPK 양식으로 만들어요.\\n빈 계약서: 제목·당사자·서명란만 있는 새 양식이에요.'")
+ct = ct.replace("'빈 계약서는 제목·당사자·서명란만 있는 새 양식이에요. 조항은 편집 화면에서 더해요.'", "'만든 뒤에는 바로 편집 화면이 열려요.'")
 sg = rep(sg, "const imgUrl = u =>", "const hostUrl = id => imgUrl(co.urls?.[id]) || (window.OPK_PUBLIC_ORIGIN ? window.OPK_PUBLIC_ORIGIN + '/' + (LOGOS.find(l => l.id === id)?.file || '') : '');\nconst imgUrl = u =>", name='hu0')
 sg = rep(sg, "const u = imgUrl(co.urls?.[id]);", "const u = hostUrl(id);", name='hu1')
 sg = rep(sg, "const hostedU = imgUrl(co.urls?.[lg.id]);", "const hostedU = hostUrl(lg.id);", name='hu2')
